@@ -1,0 +1,18 @@
+---
+alwaysApply: true
+---
+# Core Technologies
+
+The main dependencies are defined in [requirements.txt](mdc:requirements.txt).
+
+- **FastAPI** with **Uvicorn** for the web layer
+- **Pydantic** for validation
+- **MediatR** to implement the mediator pattern
+- **SQLAlchemy** (`asyncio`) and **aioodbc** for database access
+- **python-jose** and **MSAL** for authentication
+- **Pytest** (with `pytest-asyncio`) for testing
+- **Ruff** for linting and formatting
+- **azure-identity** for Azure integrations
+
+`pyproject.toml` configures `ruff` and `pytest` while dependencies live in
+`requirements.txt`.

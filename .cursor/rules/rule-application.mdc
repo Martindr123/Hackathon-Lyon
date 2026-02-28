@@ -1,0 +1,73 @@
+---
+description: Guidance for the Application layer
+globs:
+  - "src/application/**"
+  - "tests/**/application/**"
+alwaysApply: false
+---
+# Application Layer Guide
+
+This layer orchestrates the business logic. It exposes **commands** and **queries** as Pydantic models and handles them through mediator handlers.
+
+## Interfaces
+Define repository and service contracts in `common/interfaces/`. They inherit from `ABC` and use domain entities.
+
+```python
+class IUserRepository(ABC):
+    @abstractmethod
+    async def create(self, user: User) -> User: ...
+```
+
+## Commands, Queries and DTOs
+- Commands change state. Queries read data.
+- Each feature folder (`user`, `invoice`, …) contains its own commands and queries.
+- DTOs (`*Dto` models) use `ConfigDict(from_attributes=True)` so handlers can easily return them.
+
+## Handlers
+Handlers implement the use cases. They receive their dependencies via constructor injection and use repositories through their interfaces.
+
+```python
+@Mediator.handler
+class CreateUserCommandHandler:
+    def __init__(self, user_repo: IRepository[User]):
+        self.user_repo = user_repo
+
+    async def handle(self, command: CreateUserCommand) -> int:
+        user = User(username=command.username, email=command.email, hashed_password=f"hashed_{command.password}")
+        created = await self.user_repo.create(user)
+        return created.id
+```
+
+### Commands and Queries
+
+A command and its handler (`create_invoice_command.py`):
+
+```python
+class CreateInvoiceCommand(BaseModel, GenericQuery[int]):
+    customer_name: str
+    amount: float
+
+@Mediator.handler
+class CreateInvoiceCommandHandler:
+    def __init__(self, invoice_repo: IRepository[Invoice]):
+        self.invoice_repo = invoice_repo
+
+    async def handle(self, command: CreateInvoiceCommand) -> int:
+        invoice = Invoice(customer_name=command.customer_name, amount=command.amount)
+        created = await self.invoice_repo.create(invoice)
+        assert created.id is not None
+        return created.id
+```
+
+A simple query (`get_user_query.py`) and DTO (`user_dto.py`):
+
+```python
+class UserDto(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    email: EmailStr
+
+class GetUserQuery(BaseModel, GenericQuery[Optional[UserDto]]):
+    id: int
+```

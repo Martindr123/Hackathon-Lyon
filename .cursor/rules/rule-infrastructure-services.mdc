@@ -1,0 +1,19 @@
+---
+description: Guidance for infrastructure services
+globs:
+  - "src/infrastructure/services/**"
+  - "tests/**/infrastructure/services/**"
+alwaysApply: false
+---
+# Infrastructure Service Guide
+
+Services encapsulate communication with external systems (APIs, files, etc.). They should hide implementation details from the rest of the application.
+
+Key practices:
+- Load credentials from the environment in `__init__`.
+- Handle transient errors with retries and log failures.
+- Accept and return domain models.
+
+For example, `azure_entra_id_database_connection.get_engine()` builds an
+SQLAlchemy engine using Azure credentials and injects an access token at
+connection time.

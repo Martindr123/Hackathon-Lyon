@@ -1,0 +1,43 @@
+---
+description: Guidance for the API layer
+globs:
+  - "src/api/**"
+  - "tests/**/api/**"
+alwaysApply: false
+---
+# API Layer Guide
+
+The API layer exposes FastAPI routers. Controllers convert requests into commands or queries and send them through the **Mediator**.
+
+## Controllers
+- Define a `router = APIRouter()` in each controller file.
+- Inject the mediator with `Depends(get_mediator)` from `src/api/dependencies.py`.
+- Never contain business logic; call the mediator and return the resulting DTO.
+
+```python
+@router.post("/", response_model=UserDto)
+async def create_user(request: CreateUserCommand, mediator: Mediator = Depends(get_mediator)):
+    user_id = await mediator.send(request)
+    return await mediator.send(GetUserQuery(id=user_id))
+```
+
+## Dependency Injection
+`dependencies.py` provides the mediator and a repository provider.
+
+```python
+# At startup each request gets a fresh mediator
+async def get_mediator(repo_provider: RepositoryProvider = Depends(get_repository_provider)) -> Mediator:
+    return Mediator(handler_class_manager=lambda cls, _: cls(repo_provider[HANDLER_DEPENDENCIES[cls]]))
+```
+
+Routers are included in `main.py` and secured with the authentication dependency.
+
+### Example 1
+User creation in `user_controller.py`:
+
+```python
+@router.post("/", response_model=UserDto, status_code=status.HTTP_201_CREATED)
+async def create_user(request: CreateUserCommand, mediator: Mediator = Depends(get_mediator)):
+    user_id = await mediator.send(request)  # type: ignore
+    return await mediator.send(GetUserQuery(id=user_id))  # type: ignore
+```

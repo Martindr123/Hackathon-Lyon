@@ -1,0 +1,30 @@
+---
+description: Guidance for infrastructure repositories
+globs:
+  - "src/infrastructure/repos/**"
+  - "tests/**/infrastructure/repos/**"
+alwaysApply: false
+---
+# Infrastructure Repository Guide
+
+Repositories implement the interfaces defined in the application layer and handle data persistence. In this template `SQLAlchemyRepository` provides a generic implementation and `RepositoryFactory` creates repositories for a given domain entity.
+
+```python
+class SQLAlchemyRepository(IRepository[T], Generic[T, M]):
+    def __init__(self, session: AsyncSession, entity_class: Type[T], model_class: Type[M]):
+        ...
+```
+
+Use the factory in `dependencies.py` to instantiate repositories per request.
+
+Example factory usage:
+
+```python
+class RepositoryFactory:
+    @classmethod
+    def create_repository(cls, session: AsyncSession, entity_class: Type[BaseModel]) -> SQLAlchemyRepository:
+        model_class = ENTITY_MODEL_MAP.get(entity_class)
+        if not model_class:
+            raise ValueError(f"No mapping found for {entity_class.__name__}")
+        return SQLAlchemyRepository(session, entity_class, model_class)
+```

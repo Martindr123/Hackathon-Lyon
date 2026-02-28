@@ -1,0 +1,10 @@
+SimpleITK
+nibabel
+monai
+opencv-python
+scikit-image
+dicom2nifti
+pynetdicom
+pandas
+matplotlib
+plotly

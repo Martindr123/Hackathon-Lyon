@@ -1,0 +1,32 @@
+# Environnement virtuel
+env/
+.venv/
+
+# Fichiers de configuration sensibles
+.env
+
+# Caches Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Dossiers temporaires de tests
+*.pytest_cache/
+
+# Fichiers de log ou de debug
+*.log
+
+# Fichiers VSCode
+.vscode/
+
+# Mac & Windows files
+.DS_Store
+Thumbs.db
+
+# Ignore environment-specific configuration files
+development.json
+qa.json
+production.json 
+
+
+data/
