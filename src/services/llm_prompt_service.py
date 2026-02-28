@@ -3,6 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from dataclasses import dataclass, field
 
+import numpy as np
+import SimpleITK as sitk
+import pydicom
+
 from src.repositories.liste_examen_repo import ListeExamenRepo, Examen
 from src.repositories.data_repo import DataRepo, StudyInfo
 
@@ -14,6 +18,8 @@ class PromptMessage:
     role: str  # "system" or "user"
     text: str | None = None
     image_paths: list[Path] = field(default_factory=list)
+    seg_path: Path | None = None
+    series_files: list[Path] = field(default_factory=list)
 
 
 @dataclass
@@ -44,8 +50,8 @@ radiology report for the patient's latest CT scan examination.
 You will be provided with:
 1. The patient's previous clinical reports (chronological order), including \
 lesion measurements.
-2. CT scan images from previous examinations for comparison.
-3. CT scan images from the current (latest) examination that you must report on.
+2. CT scan images from the current (latest) examination that you must report on. \
+Lesions annotated by the radiologist are highlighted in red on the images.
 
 Based on all this information, write a structured clinical report for the \
 current examination following this format:
@@ -60,8 +66,51 @@ Important guidelines:
 - Compare lesion sizes with previous measurements when available.
 - Note any new findings or changes from prior examinations.
 - Use precise medical terminology.
-- Mention the comparison studies used.\
+- Mention the comparison studies used.
+- Red overlays on images indicate radiologist-annotated segmentation masks \
+of lesions of interest.\
 """
+
+
+def _extract_ct_metadata(ct_path: Path) -> dict[str, str]:
+    """Read relevant metadata from a CT DICOM file."""
+    ds = pydicom.dcmread(str(ct_path), stop_before_pixels=True)
+    meta: dict[str, str] = {}
+    tag_map = {
+        "PatientSex": "Patient sex",
+        "PatientAge": "Patient age",
+        "StudyDate": "Study date",
+        "StudyDescription": "Study description",
+        "SeriesDescription": "Series description",
+        "BodyPartExamined": "Body part",
+        "Manufacturer": "Scanner manufacturer",
+        "ManufacturerModelName": "Scanner model",
+        "KVP": "Tube voltage (kVp)",
+        "SliceThickness": "Slice thickness (mm)",
+        "ConvolutionKernel": "Reconstruction kernel",
+        "ContrastBolusRoute": "Contrast route",
+        "ScanOptions": "Scan mode",
+        "PatientComments": "Protocol",
+        "WindowCenter": "Default window center",
+        "WindowWidth": "Default window width",
+    }
+    for attr, label in tag_map.items():
+        val = getattr(ds, attr, None)
+        if val is not None and str(val).strip():
+            meta[label] = str(val)
+
+    pixel_spacing = getattr(ds, "PixelSpacing", None)
+    if pixel_spacing:
+        meta["Pixel spacing (mm)"] = f"{pixel_spacing[0]:.3f} x {pixel_spacing[1]:.3f}"
+
+    return meta
+
+
+def _format_metadata_block(metadata: dict[str, str]) -> str:
+    lines = ["### CT acquisition metadata"]
+    for label, value in metadata.items():
+        lines.append(f"- {label}: {value}")
+    return "\n".join(lines)
 
 
 def _format_exam_history_block(examen: Examen, study: StudyInfo | None) -> str:
@@ -102,12 +151,7 @@ class LLMPromptService:
         Only the CT series matching the Excel "Série avec les masques de DICOM SEG"
         column is included (the clinically relevant one). Slices are evenly
         subsampled to keep the image count manageable for LLMs.
-
-        Args:
-            patient_id: The patient ID.
-            current_accession_number: The accession number of the exam to report on.
-                If None, uses the last exam chronologically.
-            max_slices_per_exam: Max number of CT slices to include per exam.
+        Images are sent as overlays with the segmentation mask highlighted in red.
         """
         history = self._examen_repo.get_patient_history(patient_id)
         if not history:
@@ -149,13 +193,22 @@ class LLMPromptService:
                 )
             )
 
-        # 3. Current exam: metadata + images
+        # 3. Current exam: metadata + overlay images
         current_study = self._data_repo.get_study(patient_id, current_exam.accession_number)
-        current_images = (
-            self._get_relevant_ct_images(current_study, current_exam, max_slices_per_exam)
-            if current_study
-            else []
-        )
+
+        ct_series = self._match_series(current_study, current_exam.serie) if current_study else None
+        all_series_files = ct_series.dicom_files if ct_series else []
+
+        seg_path = None
+        if current_study and current_study.segmentation and current_study.segmentation.dicom_files:
+            seg_path = current_study.segmentation.dicom_files[0]
+
+        sampled_files = _subsample(all_series_files, max_slices_per_exam, seg_path)
+
+        # Extract CT metadata from the first available slice
+        ct_metadata: dict[str, str] = {}
+        if sampled_files:
+            ct_metadata = _extract_ct_metadata(sampled_files[0])
 
         current_text_parts = [
             "## Current examination to report on\n",
@@ -163,29 +216,31 @@ class LLMPromptService:
             f"Study: {current_study.description if current_study else 'N/A'}",
             f"Series with segmentation masks: {current_exam.serie}",
             f"Lesion sizes (mm): {', '.join(f'{s:.1f}' for s in current_exam.lesion_sizes_mm)}",
+        ]
+        if ct_metadata:
+            current_text_parts.append("")
+            current_text_parts.append(_format_metadata_block(ct_metadata))
+
+        current_text_parts.extend([
+            "",
+            "The following CT images have the radiologist's segmentation overlaid "
+            "in red where lesions were annotated.",
             "",
             "Please generate the clinical report for this examination, "
             "comparing with the previous exams provided above.",
-        ]
+        ])
 
         prompt.messages.append(
             PromptMessage(
                 role="user",
                 text="\n".join(current_text_parts),
-                image_paths=current_images,
+                image_paths=sampled_files,
+                seg_path=seg_path,
+                series_files=all_series_files,
             )
         )
 
         return prompt
-
-    def _get_relevant_ct_images(
-        self, study: StudyInfo, examen: Examen, max_slices: int
-    ) -> list[Path]:
-        """Pick only the CT series matching the SEG column, then subsample."""
-        series = self._match_series(study, examen.serie)
-        if series is None:
-            return []
-        return _subsample(series.dicom_files, max_slices)
 
     @staticmethod
     def _match_series(study: StudyInfo, serie_label: str) -> "SeriesInfo | None":
@@ -200,7 +255,6 @@ class LLMPromptService:
             name_lower = series.name.lower()
             if all(kw in name_lower for kw in keywords):
                 return series
-        # Fallback: partial match on first keyword
         if keywords:
             for series in study.ct_series:
                 if keywords[0] in series.name.lower():
@@ -208,13 +262,44 @@ class LLMPromptService:
         return None
 
 
-def _subsample(files: list[Path], max_count: int) -> list[Path]:
-    """Return at most *max_count* evenly spaced items from *files*."""
+def _subsample(
+    files: list[Path],
+    max_count: int,
+    seg_path: Path | None = None,
+) -> list[Path]:
+    """Return at most *max_count* items from *files*.
+
+    Slices containing a segmentation mask are always included first.
+    The remaining budget is filled with evenly-spaced slices from the rest.
+    """
     n = len(files)
     if n <= max_count:
         return files
-    step = n / max_count
-    return [files[int(i * step)] for i in range(max_count)]
+
+    seg_indices: set[int] = set()
+    if seg_path:
+        try:
+            seg_img = sitk.ReadImage(str(seg_path))
+            seg_arr = sitk.GetArrayFromImage(seg_img)
+            seg_indices = {i for i in range(min(seg_arr.shape[0], n)) if seg_arr[i].any()}
+        except Exception:
+            pass
+
+    seg_indices = {i for i in seg_indices if i < n}
+
+    if len(seg_indices) >= max_count:
+        seg_list = sorted(seg_indices)
+        step = len(seg_list) / max_count
+        chosen = sorted({seg_list[int(i * step)] for i in range(max_count)})
+        return [files[i] for i in chosen]
+
+    remaining_budget = max_count - len(seg_indices)
+    other_indices = [i for i in range(n) if i not in seg_indices]
+    step = len(other_indices) / remaining_budget if remaining_budget > 0 else 1
+    sampled_others = {other_indices[int(i * step)] for i in range(remaining_budget)}
+
+    chosen = sorted(seg_indices | sampled_others)
+    return [files[i] for i in chosen]
 
 
 if __name__ == "__main__":
@@ -234,10 +319,12 @@ if __name__ == "__main__":
     for i, msg in enumerate(prompt.messages):
         print(f"\n{'=' * 80}")
         print(f"MESSAGE {i}  |  role={msg.role}  |  images={len(msg.image_paths)}")
+        if msg.seg_path:
+            print(f"  SEG: {msg.seg_path.name}")
         print("=" * 80)
         if msg.text:
             print(msg.text)
         if msg.image_paths:
-            print(f"\n  >> {len(msg.image_paths)} DICOM images attached")
+            print(f"\n  >> {len(msg.image_paths)} DICOM images attached (overlay)")
             print(f"     first: {msg.image_paths[0].name}")
             print(f"     last:  {msg.image_paths[-1].name}")
