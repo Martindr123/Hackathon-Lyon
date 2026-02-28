@@ -8,3 +8,6 @@ pynetdicom
 pandas
 matplotlib
 plotly
+mistralai
+python-dotenv
+openpyxl
