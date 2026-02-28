@@ -126,23 +126,28 @@ class LLMService:
         self._model = model
         self._client = Mistral(api_key=self._api_key)
 
-    def send(self, prompt: LLMPrompt) -> str:
-        """Send an LLMPrompt to Mistral and return the assistant's text response."""
+    def send(self, prompt: LLMPrompt, *, json_mode: bool = False) -> str:
+        """Send an LLMPrompt to Mistral and return the assistant's text response.
+
+        When *json_mode* is True the model is instructed to return valid JSON.
+        """
         messages = self._format_messages(prompt)
 
         logger.info(
-            "Sending prompt to %s (%d messages, %d images)",
+            "Sending prompt to %s (%d messages, %d images, json=%s)",
             self._model,
             len(messages),
             len(prompt.all_image_paths),
+            json_mode,
         )
+
+        kwargs: dict = {"model": self._model, "messages": messages}
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                response = self._client.chat.complete(
-                    model=self._model,
-                    messages=messages,
-                )
+                response = self._client.chat.complete(**kwargs)
                 content = response.choices[0].message.content
                 logger.info(
                     "Response received (%d tokens prompt, %d tokens completion)",
@@ -164,3 +169,15 @@ class LLMService:
                 "content": _build_content_parts(msg),
             })
         return formatted
+
+
+if __name__ == "__main__":
+    system_prompt = """salut"""
+    service = LLMService()
+    prompt = LLMPrompt(
+        messages=[
+            PromptMessage(role="system", text=system_prompt),
+        ]
+    )
+    response = service.send(prompt)
+    print(response)

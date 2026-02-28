@@ -20,6 +20,7 @@ class Examen:
     patient_id: str
     accession_number: int
     clinical_info: str
+    study_date: str | None = None
 
     @property
     def max_lesion_size(self) -> float | None:
@@ -85,10 +86,31 @@ class ListeExamenRepo:
         df = self._load()
         return df[COL_PATIENT_ID].unique().tolist()
 
-    def get_patient_history(self, patient_id: str) -> list[Examen]:
-        """All exams for a patient, ordered by accession number."""
+    def get_patient_history(
+        self, patient_id: str, data_repo: "DataRepo | None" = None
+    ) -> list[Examen]:
+        """All exams for a patient, ordered chronologically.
+
+        When *data_repo* is provided, each exam is enriched with its DICOM
+        ``StudyDate`` and the list is sorted by that date.  Otherwise the
+        fallback sort key is ``accession_number`` (not guaranteed to be
+        chronological).
+        """
+        from src.repositories.data_repo import DataRepo  # noqa: F811 – lazy to avoid circular
+
         exams = self.get_by_patient_id(patient_id)
-        return sorted(exams, key=lambda e: e.accession_number)
+
+        if data_repo is not None:
+            for exam in exams:
+                if exam.study_date is None:
+                    exam.study_date = data_repo.get_study_date(
+                        patient_id, exam.accession_number
+                    )
+
+        def _sort_key(e: Examen) -> tuple[str, int]:
+            return (e.study_date or "9999-99-99", e.accession_number)
+
+        return sorted(exams, key=_sort_key)
 
     def get_clinical_report(self, accession_number: int) -> str | None:
         examen = self.get_by_accession_number(accession_number)

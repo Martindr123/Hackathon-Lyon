@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RadioAssist</title>
+  <link rel="stylesheet" href="/app/style.css" />
+</head>
+<body>
+
+  <!-- ── Top bar ──────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="topbar-icon">+</span>
+      <h1>RadioAssist</h1>
+    </div>
+    <span class="topbar-sub">Clinical Report Generator</span>
+  </header>
+
+  <div class="layout">
+
+    <!-- ── Sidebar ──────────────────────────────────── -->
+    <aside class="sidebar" id="sidebar">
+      <section class="sidebar-section">
+        <h2 class="sidebar-title">Patients</h2>
+        <div id="patient-list" class="patient-list">
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line"></div>
+        </div>
+      </section>
+
+      <section class="sidebar-section" id="exam-section" style="display:none">
+        <h2 class="sidebar-title">Examinations</h2>
+        <div id="exam-timeline" class="exam-timeline"></div>
+      </section>
+
+      <div class="sidebar-actions">
+        <button id="btn-generate" class="btn btn-primary" disabled>
+          <span class="btn-icon">&#9654;</span> Generate Report
+        </button>
+      </div>
+    </aside>
+
+    <!-- ── Main content ─────────────────────────────── -->
+    <main class="main" id="main">
+
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">&#128203;</div>
+        <h2>Select a patient and exam</h2>
+        <p>Pick a patient from the sidebar, choose an examination, then click <strong>Generate Report</strong>.</p>
+      </div>
+
+      <!-- Loading overlay -->
+      <div id="loading-overlay" class="loading-overlay" style="display:none">
+        <div class="spinner"></div>
+        <p class="loading-text">Generating report&hellip;</p>
+        <p class="loading-sub">Deterministic analysis + LLM agents (~30s)</p>
+      </div>
+
+      <!-- Report container -->
+      <div id="report-container" style="display:none">
+
+        <!-- Report header -->
+        <div class="report-header" id="report-header"></div>
+
+        <!-- Sections -->
+        <div class="report-sections">
+
+          <section class="report-card" id="section-clinical-info">
+            <h3 class="card-title" data-toggle="clinical-info-body">
+              <span class="card-icon">&#128100;</span> Clinical Information
+              <span class="chevron">&#9660;</span>
+            </h3>
+            <div class="card-body" id="clinical-info-body"></div>
+          </section>
+
+          <section class="report-card" id="section-study-technique">
+            <h3 class="card-title" data-toggle="study-technique-body">
+              <span class="card-icon">&#9881;</span> Study Technique
+              <span class="chevron">&#9660;</span>
+            </h3>
+            <div class="card-body" id="study-technique-body"></div>
+          </section>
+
+          <section class="report-card" id="section-report-det">
+            <h3 class="card-title card-title--blue" data-toggle="report-det-body">
+              <span class="card-icon">&#128200;</span> Findings &mdash; Deterministic
+              <span class="chevron">&#9660;</span>
+            </h3>
+            <div class="card-body" id="report-det-body"></div>
+          </section>
+
+          <section class="report-card" id="section-report-agent">
+            <h3 class="card-title card-title--purple" data-toggle="report-agent-body">
+              <span class="card-icon">&#129302;</span> Findings &mdash; AI Agent
+              <span class="chevron">&#9660;</span>
+            </h3>
+            <div class="card-body" id="report-agent-body"></div>
+          </section>
+
+          <section class="report-card" id="section-conclusions">
+            <h3 class="card-title" data-toggle="conclusions-body">
+              <span class="card-icon">&#9989;</span> Conclusions
+              <span class="chevron">&#9660;</span>
+            </h3>
+            <div class="card-body" id="conclusions-body"></div>
+          </section>
+
+        </div>
+
+        <!-- Action bar -->
+        <div class="action-bar">
+          <button id="btn-copy" class="btn btn-secondary">&#128203; Copy as text</button>
+          <button id="btn-export" class="btn btn-secondary">&#128229; Export JSON</button>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="/app/app.js"></script>
+</body>
+</html>

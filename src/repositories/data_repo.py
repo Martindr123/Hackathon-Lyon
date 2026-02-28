@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from dataclasses import dataclass, field
 
+import pydicom
+
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
@@ -156,6 +158,21 @@ class DataRepo:
             return None
         seg = study.segmentation
         return seg.dicom_files[0] if seg and seg.dicom_files else None
+
+    def get_study_date(self, patient_id: str, accession_number: int) -> str | None:
+        """Read the DICOM StudyDate (YYYYMMDD → YYYY-MM-DD) for a study."""
+        study = self.get_study(patient_id, accession_number)
+        if study is None:
+            return None
+        for series in study.ct_series:
+            if not series.dicom_files:
+                continue
+            ds = pydicom.dcmread(str(series.dicom_files[0]), stop_before_pixels=True)
+            raw = getattr(ds, "StudyDate", None)
+            if raw:
+                raw = str(raw)
+                return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}" if len(raw) == 8 else raw
+        return None
 
     def get_series_by_name(
         self, patient_id: str, accession_number: int, series_name: str

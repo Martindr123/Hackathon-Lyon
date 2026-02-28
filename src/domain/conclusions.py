@@ -12,3 +12,4 @@ class Conclusions(BaseModel):
     previous_sum_of_diameters_mm: float | None = Field(default=None, description="Sum of longest diameters of target lesions (previous exam)")
     key_findings: list[str] = Field(default_factory=list, description="Bullet-point summary of the most important findings")
     recommendation: str | None = Field(default=None, description="Follow-up recommendation if any")
+    conclusions_confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="Agent confidence in key_findings and recommendation")

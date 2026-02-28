@@ -7,7 +7,8 @@ class StudyTechnique(BaseModel):
     """STUDY TECHNIQUE section — imaging protocol and comparison reference."""
 
     study_description: str = Field(description="Regions scanned (e.g. 'Thoracic, abdominal, and pelvic CT')")
-    contrast: str | None = Field(default=None, description="Contrast administration (e.g. 'IV')")
+    contrast: str | None = Field(default=None, description="Contrast administration route (e.g. 'IV')")
+    contrast_agent: str | None = Field(default=None, description="Contrast product (e.g. 'Omnipaque 300')")
     scanner_model: str | None = Field(default=None)
     tube_voltage_kvp: int | None = Field(default=None)
     slice_thickness_mm: float | None = Field(default=None)

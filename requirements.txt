@@ -11,3 +11,5 @@ plotly
 mistralai
 python-dotenv
 openpyxl
+fastapi
+uvicorn
