@@ -181,6 +181,18 @@ async function startInteractive() {
       body: JSON.stringify({ patient_id: selectedPatient, accession_number: selectedAccession }),
     });
 
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      try {
+        const errBody = await res.json();
+        errMsg = errBody.detail || errMsg;
+      } catch (_) { /* ignore parse error */ }
+      $reviewStatus.innerHTML = `<span style="color:#ef4444">${errMsg}</span>`;
+      $btnGenerate.disabled = false;
+      $btnQuick.disabled = false;
+      return;
+    }
+
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";

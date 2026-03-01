@@ -164,6 +164,14 @@ async def start_interactive(request: StartRequest):
     ctx = build_exam_context(
         patient_id, accession, request.max_slices, _examen_repo, _data_repo
     )
+
+    if not ctx.series_files:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No DICOM data available for accession {accession}. "
+            "The exam exists in clinical records but has no imaging data on disk.",
+        )
+
     session = create_session(patient_id, accession, ctx)
 
     async def event_stream():
