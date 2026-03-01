@@ -1091,14 +1091,134 @@ function fmtVol(v) { if (v == null) return "\u2014"; return v >= 1000 ? `${(v / 
 
 function renderDeterminist(det) {
   let html = "";
-  if (det.recist_conclusion) {
-    html += `<div style="margin-bottom:.75rem"><span class="recist-badge recist-${det.recist_conclusion}">${det.recist_conclusion}</span><span style="margin-left:.5rem;font-size:.8rem;color:#94a3b8">RECIST 1.1</span></div>`;
+
+  // ── RECIST badges (classic + volumetric) ───────────────
+  const adv = det.advanced_metrics || {};
+  if (det.recist_conclusion || adv.v_recist_conclusion) {
+    html += `<div class="recist-row">`;
+    if (det.recist_conclusion) {
+      html += `<div class="recist-item"><span class="recist-badge recist-${det.recist_conclusion}">${det.recist_conclusion}</span><span class="recist-sub">RECIST 1.1</span></div>`;
+    }
+    if (adv.v_recist_conclusion) {
+      html += `<div class="recist-item"><span class="recist-badge recist-${adv.v_recist_conclusion}">${adv.v_recist_conclusion}</span><span class="recist-sub">Volumetric RECIST</span></div>`;
+    }
+    html += `</div>`;
+    if (adv.v_recist_justification) {
+      html += `<p class="v-recist-justification">${esc(adv.v_recist_justification)}</p>`;
+    }
   }
+
+  // ── Tumor Burden + Kinetics summary cards ──────────────
+  const hasAdvCards = adv.total_tumor_burden_ml != null || adv.days_since_previous_exam != null || adv.trend_direction;
+  if (hasAdvCards) {
+    html += `<div class="metrics-cards">`;
+
+    if (adv.total_tumor_burden_ml != null) {
+      const pctClass = adv.tumor_burden_change_percent != null
+        ? (adv.tumor_burden_change_percent > 5 ? "metric-bad" : adv.tumor_burden_change_percent < -5 ? "metric-good" : "metric-neutral")
+        : "";
+      html += `<div class="metric-card">
+        <div class="metric-label">Tumor Burden</div>
+        <div class="metric-value">${adv.total_tumor_burden_ml.toFixed(1)} <span class="metric-unit">mL</span></div>
+        ${adv.previous_total_tumor_burden_ml != null ? `<div class="metric-prev">prev. ${adv.previous_total_tumor_burden_ml.toFixed(1)} mL</div>` : ""}
+        ${adv.tumor_burden_change_percent != null ? `<div class="metric-change ${pctClass}">${fmtPct(adv.tumor_burden_change_percent)}</div>` : ""}
+      </div>`;
+    }
+
+    if (adv.days_since_previous_exam != null) {
+      html += `<div class="metric-card">
+        <div class="metric-label">Interval</div>
+        <div class="metric-value">${adv.days_since_previous_exam} <span class="metric-unit">days</span></div>
+      </div>`;
+    }
+
+    if (adv.trend_direction) {
+      const trendIcon = { improving: "\u2198\uFE0F", stable: "\u27A1\uFE0F", worsening: "\u2197\uFE0F", accelerating: "\u26A0\uFE0F", mixed: "\u2194\uFE0F" };
+      html += `<div class="metric-card">
+        <div class="metric-label">Trend</div>
+        <div class="metric-value trend-${adv.trend_direction}">${trendIcon[adv.trend_direction] || ""} ${adv.trend_direction}</div>
+        ${adv.consecutive_stable_exams ? `<div class="metric-prev">${adv.consecutive_stable_exams} consecutive stable</div>` : ""}
+        ${adv.change_from_nadir_percent != null && adv.change_from_nadir_percent > 0 ? `<div class="metric-change metric-bad">+${adv.change_from_nadir_percent.toFixed(1)}% from nadir</div>` : ""}
+      </div>`;
+    }
+
+    if (adv.nadir_sum_of_diameters_mm != null) {
+      html += `<div class="metric-card">
+        <div class="metric-label">Nadir (best response)</div>
+        <div class="metric-value">${adv.nadir_sum_of_diameters_mm.toFixed(1)} <span class="metric-unit">mm</span></div>
+        <div class="metric-prev">sum of diameters</div>
+      </div>`;
+    }
+
+    html += `</div>`;
+  }
+
+  // ── Lesion table with advanced columns ─────────────────
   if (det.lesions.length) {
-    html += `<table class="lesion-table"><thead><tr><th>#</th><th>Long. Diam.</th><th>Short Axis</th><th>Previous</th><th>Evolution</th><th>Change</th><th>Volume</th><th>Vol. Change</th><th>Slice</th></tr></thead><tbody>
-      ${det.lesions.map((l, i) => `<tr><td>${i + 1}</td><td class="mono">${fmtDims(l.dimensions_mm)}</td><td class="mono">${l.short_axis_mm != null ? l.short_axis_mm.toFixed(1) + " mm" : "\u2014"}</td><td class="mono">${fmtDims(l.previous_dimensions_mm)}</td><td>${evolutionTag(l.evolution)}</td><td class="mono">${fmtPct(l.change_percent)}</td><td class="mono">${fmtVol(l.volume_mm3)}</td><td class="mono">${fmtPct(l.volume_change_percent)}</td><td class="mono">${l.slice_index != null ? "img " + l.slice_index : "\u2014"}</td></tr>`).join("")}
-    </tbody></table>`;
+    const lmMap = {};
+    (adv.lesion_metrics || []).forEach(lm => { lmMap[lm.segment_number] = lm; });
+
+    html += `<table class="lesion-table"><thead><tr>
+      <th>#</th><th>Long. Diam.</th><th>Short Axis</th><th>Previous</th><th>Evolution</th><th>Change</th>
+      <th>Volume</th><th>Vol. Change</th>
+      <th>TGR</th><th>Doubling</th><th>HU</th>
+      <th>Slice</th>
+    </tr></thead><tbody>`;
+
+    det.lesions.forEach((l, i) => {
+      const lm = lmMap[i + 1] || {};
+      const tgr = lm.growth_rate_percent_per_month != null ? `${lm.growth_rate_percent_per_month >= 0 ? "+" : ""}${lm.growth_rate_percent_per_month.toFixed(1)}%/mo` : "\u2014";
+      const tdt = lm.doubling_time_days != null ? `${lm.doubling_time_days.toFixed(0)}d` : "\u2014";
+
+      let huCell = "\u2014";
+      if (lm.hu_heterogeneity_index != null) {
+        const hetClass = lm.hu_heterogeneity_index > 0.5 ? "het-high" : lm.hu_heterogeneity_index > 0.3 ? "het-med" : "het-low";
+        huCell = `<span class="hu-badge ${hetClass}" title="Mean: ${lm.hu_mean?.toFixed(0)} HU, Std: ${lm.hu_std?.toFixed(0)} HU">${lm.hu_mean?.toFixed(0)}\u00B1${lm.hu_std?.toFixed(0)} <span class="het-idx">(${lm.hu_heterogeneity_index.toFixed(2)})</span></span>`;
+      }
+
+      const tdtClass = lm.doubling_time_days != null && lm.doubling_time_days > 0 && lm.doubling_time_days < 400 ? "tdt-fast" : "";
+      const tgrClass = lm.growth_rate_percent_per_month != null && lm.growth_rate_percent_per_month > 5 ? "tgr-fast" : "";
+
+      html += `<tr>
+        <td>${i + 1}</td>
+        <td class="mono">${fmtDims(l.dimensions_mm)}</td>
+        <td class="mono">${l.short_axis_mm != null ? l.short_axis_mm.toFixed(1) + " mm" : "\u2014"}</td>
+        <td class="mono">${fmtDims(l.previous_dimensions_mm)}</td>
+        <td>${evolutionTag(l.evolution)}</td>
+        <td class="mono">${fmtPct(l.change_percent)}</td>
+        <td class="mono">${fmtVol(l.volume_mm3)}</td>
+        <td class="mono">${fmtPct(l.volume_change_percent)}</td>
+        <td class="mono ${tgrClass}">${tgr}</td>
+        <td class="mono ${tdtClass}">${tdt}</td>
+        <td class="mono">${huCell}</td>
+        <td class="mono">${l.slice_index != null ? "img " + l.slice_index : "\u2014"}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
   }
+
+  // ── Trend chart (sparkline-style) ──────────────────────
+  if (adv.trend && adv.trend.length >= 2) {
+    html += `<div class="trend-section">`;
+    html += `<div class="trend-title">Tumor Burden Trajectory</div>`;
+    html += `<div class="trend-timeline">`;
+    adv.trend.forEach((pt, i) => {
+      const isLast = i === adv.trend.length - 1;
+      const vol = pt.total_volume_ml != null ? `${pt.total_volume_ml.toFixed(1)} mL` : "\u2014";
+      const sum = pt.sum_of_diameters_mm != null ? `\u2211 ${pt.sum_of_diameters_mm.toFixed(1)} mm` : "";
+      html += `<div class="trend-point ${isLast ? "trend-current" : ""}">
+        <div class="trend-date">${pt.study_date}</div>
+        <div class="trend-dot"></div>
+        <div class="trend-details">
+          <span class="trend-vol">${vol}</span>
+          <span class="trend-sum">${sum}</span>
+          <span class="trend-count">${pt.lesion_count} lesion${pt.lesion_count > 1 ? "s" : ""}</span>
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
   document.getElementById("report-det-body").innerHTML = html || "<p style='color:#64748b'>No deterministic findings.</p>";
 }
 
@@ -1266,11 +1386,31 @@ function exportPDF() {
   addSection("Findings — Deterministic");
   const det = r.report.report_determinist;
   if (det.recist_conclusion) addLine(`RECIST 1.1: ${det.recist_conclusion}`);
+  const pdfAdv = det.advanced_metrics || {};
+  if (pdfAdv.v_recist_conclusion) addLine(`Volumetric RECIST: ${pdfAdv.v_recist_conclusion}`);
+  if (pdfAdv.total_tumor_burden_ml != null) {
+    let burdenLine = `Total tumor burden: ${pdfAdv.total_tumor_burden_ml.toFixed(1)} mL`;
+    if (pdfAdv.tumor_burden_change_percent != null) burdenLine += ` (${pdfAdv.tumor_burden_change_percent >= 0 ? "+" : ""}${pdfAdv.tumor_burden_change_percent.toFixed(1)}%)`;
+    addLine(burdenLine);
+  }
+  if (pdfAdv.days_since_previous_exam != null) addLine(`Interval since previous exam: ${pdfAdv.days_since_previous_exam} days`);
+  if (pdfAdv.trend_direction) {
+    let trendLine = `Trend: ${pdfAdv.trend_direction}`;
+    if (pdfAdv.consecutive_stable_exams) trendLine += ` (${pdfAdv.consecutive_stable_exams} consecutive stable)`;
+    addLine(trendLine);
+  }
   if (det.lesions && det.lesions.length) {
+    const pdfLmMap = {};
+    (pdfAdv.lesion_metrics || []).forEach(lm => { pdfLmMap[lm.segment_number] = lm; });
     det.lesions.forEach((l, i) => {
       const dims = l.dimensions_mm ? l.dimensions_mm.map((d) => d.toFixed(1)).join(" × ") + " mm" : "—";
       const evo = l.evolution || "—";
-      addLine(`${i + 1}. ${dims}  |  Evolution: ${evo}`);
+      const lm = pdfLmMap[i + 1] || {};
+      let extra = "";
+      if (lm.growth_rate_percent_per_month != null) extra += ` | TGR: ${lm.growth_rate_percent_per_month >= 0 ? "+" : ""}${lm.growth_rate_percent_per_month.toFixed(1)}%/mo`;
+      if (lm.doubling_time_days != null) extra += ` | TDT: ${lm.doubling_time_days.toFixed(0)}d`;
+      if (lm.hu_heterogeneity_index != null) extra += ` | HU: ${lm.hu_mean?.toFixed(0)}±${lm.hu_std?.toFixed(0)} (het: ${lm.hu_heterogeneity_index.toFixed(2)})`;
+      addLine(`${i + 1}. ${dims}  |  Evolution: ${evo}${extra}`);
     });
   }
 
@@ -1336,6 +1476,21 @@ function reportToText(r) {
     reportLines.push(line);
   }
   if (det.recist_conclusion) reportLines.push(`RECIST 1.1: ${det.recist_conclusion}`);
+  const txtAdv = det.advanced_metrics || {};
+  if (txtAdv.v_recist_conclusion) reportLines.push(`Volumetric RECIST: ${txtAdv.v_recist_conclusion}`);
+  if (txtAdv.total_tumor_burden_ml != null) {
+    let bl = `Total tumor burden: ${txtAdv.total_tumor_burden_ml.toFixed(1)} mL`;
+    if (txtAdv.tumor_burden_change_percent != null) bl += ` (${txtAdv.tumor_burden_change_percent >= 0 ? "+" : ""}${txtAdv.tumor_burden_change_percent.toFixed(1)}%)`;
+    reportLines.push(bl);
+  }
+  if (txtAdv.trend_direction) reportLines.push(`Trend: ${txtAdv.trend_direction}`);
+  (txtAdv.lesion_metrics || []).forEach(lm => {
+    const parts = [];
+    if (lm.growth_rate_percent_per_month != null) parts.push(`TGR ${lm.growth_rate_percent_per_month >= 0 ? "+" : ""}${lm.growth_rate_percent_per_month.toFixed(1)}%/mo`);
+    if (lm.doubling_time_days != null) parts.push(`doubling time ${lm.doubling_time_days.toFixed(0)}d`);
+    if (lm.hu_heterogeneity_index != null) parts.push(`HU ${lm.hu_mean?.toFixed(0)}\u00B1${lm.hu_std?.toFixed(0)} (het: ${lm.hu_heterogeneity_index.toFixed(2)})`);
+    if (parts.length) reportLines.push(`- Lesion ${lm.segment_number}: ${parts.join(", ")}`);
+  });
   const inf = agt.infiltration;
   if (inf && inf.present_indicators && inf.present_indicators.length) { reportLines.push(`- Infiltration (${inf.level}): ${inf.summary || "See indicators"}`); }
   agt.organ_assessments.forEach(oa => reportLines.push(`- ${oa.organ}: ${oa.finding}`));

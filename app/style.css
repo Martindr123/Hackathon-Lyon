@@ -426,6 +426,187 @@ body {
 .recist-SD { background: #78350f; color: #fbbf24; }
 .recist-PD { background: #7f1d1d; color: #fca5a5; }
 
+/* ── Advanced metrics ─────────────────────────────────── */
+.recist-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: .75rem;
+  flex-wrap: wrap;
+}
+.recist-item {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.recist-sub {
+  font-size: .8rem;
+  color: #94a3b8;
+}
+.v-recist-justification {
+  font-size: .8rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  margin-bottom: .75rem;
+  padding: .5rem .75rem;
+  background: rgba(59,130,246,.06);
+  border-left: 3px solid #3b82f6;
+  border-radius: 0 .35rem .35rem 0;
+}
+
+.metrics-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+.metric-card {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: .5rem;
+  padding: .6rem .75rem;
+}
+.metric-label {
+  font-size: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: .25rem;
+}
+.metric-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+.metric-unit {
+  font-size: .75rem;
+  font-weight: 400;
+  color: #94a3b8;
+}
+.metric-prev {
+  font-size: .7rem;
+  color: #64748b;
+  margin-top: .1rem;
+}
+.metric-change {
+  font-size: .75rem;
+  font-weight: 600;
+  margin-top: .15rem;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+.metric-good { color: #6ee7b7; }
+.metric-bad { color: #fca5a5; }
+.metric-neutral { color: #fbbf24; }
+
+.trend-improving { color: #6ee7b7; }
+.trend-stable { color: #fbbf24; }
+.trend-worsening { color: #fca5a5; }
+.trend-accelerating { color: #f87171; }
+.trend-mixed { color: #94a3b8; }
+
+/* Per-lesion advanced styles */
+.tgr-fast { color: #fca5a5; font-weight: 600; }
+.tdt-fast { color: #fca5a5; font-weight: 600; }
+
+.hu-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  padding: .1rem .3rem;
+  border-radius: .25rem;
+  font-size: .7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.het-high { background: rgba(248,113,113,.15); color: #fca5a5; }
+.het-med { background: rgba(251,191,36,.1); color: #fbbf24; }
+.het-low { background: rgba(110,231,183,.1); color: #6ee7b7; }
+.het-idx { font-size: .6rem; opacity: .8; }
+
+/* Trend timeline */
+.trend-section {
+  margin-top: 1rem;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: .5rem;
+  padding: .75rem;
+}
+.trend-title {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #3b82f6;
+  font-weight: 600;
+  margin-bottom: .6rem;
+}
+.trend-timeline {
+  display: flex;
+  gap: .1rem;
+  overflow-x: auto;
+  padding-bottom: .25rem;
+}
+.trend-point {
+  flex: 1;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+.trend-point::after {
+  content: "";
+  position: absolute;
+  top: 2rem;
+  left: 50%;
+  right: -50%;
+  height: 2px;
+  background: #334155;
+}
+.trend-point:last-child::after { display: none; }
+.trend-date {
+  font-size: .7rem;
+  color: #94a3b8;
+  margin-bottom: .3rem;
+  font-weight: 500;
+}
+.trend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #475569;
+  border: 2px solid #1e293b;
+  position: relative;
+  z-index: 1;
+  margin-bottom: .3rem;
+}
+.trend-current .trend-dot {
+  background: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,.3);
+}
+.trend-current .trend-date { color: #3b82f6; font-weight: 700; }
+.trend-details {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .1rem;
+}
+.trend-vol {
+  font-size: .75rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+.trend-sum {
+  font-size: .65rem;
+  color: #94a3b8;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+.trend-count {
+  font-size: .6rem;
+  color: #64748b;
+}
+
 /* ── Agent findings ───────────────────────────────────── */
 .agent-subsection {
   margin-top: .75rem;
