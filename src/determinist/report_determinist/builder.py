@@ -12,6 +12,7 @@ from src.determinist.report_determinist.recist import (
     compute_change_percent,
     compute_recist_conclusion,
 )
+from src.determinist.advanced_metrics.builder import build_advanced_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -144,4 +145,13 @@ def build_report_determinist(
 
     recist = compute_recist_conclusion(current_sizes, previous_sizes or [])
 
-    return ReportDeterminist(lesions=lesions, recist_conclusion=recist)
+    logger.info("[advanced_metrics] Computing advanced oncological metrics …")
+    advanced = build_advanced_metrics(
+        patient_id, accession_number, examen_repo, data_repo
+    )
+
+    return ReportDeterminist(
+        lesions=lesions,
+        recist_conclusion=recist,
+        advanced_metrics=advanced,
+    )
