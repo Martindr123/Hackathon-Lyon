@@ -71,6 +71,44 @@ class ClinicalReport(BaseModel):
         if det.recist_conclusion:
             report_lines.append(f"RECIST 1.1: {det.recist_conclusion}")
 
+        adv = det.advanced_metrics
+        if adv.total_tumor_burden_ml is not None:
+            burden_line = f"Total tumor burden: {adv.total_tumor_burden_ml:.1f} mL"
+            if adv.tumor_burden_change_percent is not None:
+                burden_line += f" ({adv.tumor_burden_change_percent:+.1f}%)"
+            report_lines.append(burden_line)
+
+        if adv.v_recist_conclusion:
+            report_lines.append(f"Volumetric RECIST: {adv.v_recist_conclusion}")
+            if adv.v_recist_justification:
+                report_lines.append(f"  {adv.v_recist_justification}")
+
+        for lm in adv.lesion_metrics:
+            parts_lm: list[str] = []
+            if lm.growth_rate_percent_per_month is not None:
+                parts_lm.append(f"TGR {lm.growth_rate_percent_per_month:+.1f}%/month")
+            if lm.doubling_time_days is not None:
+                parts_lm.append(f"doubling time {lm.doubling_time_days:.0f}d")
+            if lm.hu_heterogeneity_index is not None:
+                parts_lm.append(
+                    f"HU {lm.hu_mean:.0f}±{lm.hu_std:.0f} "
+                    f"(heterogeneity {lm.hu_heterogeneity_index:.2f})"
+                )
+            if parts_lm:
+                report_lines.append(
+                    f"- Lesion {lm.segment_number}: {', '.join(parts_lm)}"
+                )
+
+        if adv.trend_direction:
+            trend_line = f"Trend: {adv.trend_direction}"
+            if adv.consecutive_stable_exams and adv.consecutive_stable_exams > 0:
+                trend_line += (
+                    f" ({adv.consecutive_stable_exams} consecutive stable exams)"
+                )
+            if adv.change_from_nadir_percent is not None and adv.change_from_nadir_percent > 0:
+                trend_line += f", +{adv.change_from_nadir_percent:.1f}% from nadir"
+            report_lines.append(trend_line)
+
         infilt = agt.infiltration
         if infilt.present_indicators:
             report_lines.append(
