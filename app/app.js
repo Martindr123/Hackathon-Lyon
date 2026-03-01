@@ -1206,80 +1206,107 @@ function exportPDF() {
     showToast("No report to export");
     return;
   }
-  if (typeof html2pdf === "undefined") {
+  const JsPDF = (typeof jspdf !== "undefined" && jspdf.jsPDF) ? jspdf.jsPDF : (typeof window !== "undefined" && window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : null;
+  if (!JsPDF) {
     showToast("PDF library not loaded");
     return;
   }
-  const header = document.getElementById("report-header");
-  const sections = document.querySelector("#report-container .report-sections");
-  if (!header || !sections) return;
+  const r = currentReport;
+  const M = 20;
+  const W = 210 - 2 * M;
+  const pageH = 297;
+  const maxY = pageH - M;
+  const lineH = 5.5;
+  const doc = new JsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  let y = M;
 
-  const wrapper = document.createElement("div");
-  wrapper.className = "pdf-export";
-  // Must be in viewport for html2canvas to capture (off-screen = blank PDF)
-  wrapper.style.cssText = "position:fixed;top:0;left:0;z-index:-1;width:210mm;max-width:210mm;min-height:100vh;background:#fff;color:#1e293b;padding:20px;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif;";
+  function newPage() {
+    doc.addPage();
+    y = M;
+  }
+  function addLine(text, opts = {}) {
+    const size = opts.size || 10;
+    doc.setFontSize(size);
+    doc.setFont("helvetica", opts.bold ? "bold" : "normal");
+    const lines = doc.splitTextToSize(String(text || ""), W);
+    for (const line of lines) {
+      if (y > maxY) newPage();
+      doc.text(line, M, y);
+      y += lineH;
+    }
+    if (opts.space) y += lineH * 0.5;
+    return y;
+  }
+  function addSection(title) {
+    if (y > maxY - 15) newPage();
+    y += lineH * 0.5;
+    addLine(title, { bold: true, size: 11 });
+    y += lineH * 0.3;
+  }
 
-  const style = document.createElement("style");
-  style.textContent = `
-    .pdf-export .report-header h2 { color: #0f172a; font-size: 1.4rem; }
-    .pdf-export .report-header-meta { color: #475569; }
-    .pdf-export .report-card { background: #f8fafc !important; border: 1px solid #e2e8f0 !important; margin-bottom: 12px; }
-    .pdf-export .card-title { color: #0f172a !important; background: #f1f5f9 !important; border-left-color: #64748b !important; }
-    .pdf-export .card-title--blue { border-left-color: #2563eb !important; }
-    .pdf-export .card-title--purple { border-left-color: #7c3aed !important; }
-    .pdf-export .card-body { border-top-color: #e2e8f0 !important; }
-    .pdf-export .kv-item { background: #fff !important; border: 1px solid #e2e8f0; }
-    .pdf-export .kv-label { color: #64748b !important; }
-    .pdf-export .kv-value { color: #1e293b !important; }
-    .pdf-export .lesion-table th { color: #64748b !important; border-bottom-color: #e2e8f0 !important; }
-    .pdf-export .lesion-table td { border-bottom-color: #f1f5f9 !important; }
-    .pdf-export .agent-subsection-title { color: #334155 !important; }
-    .pdf-export .infiltration-box, .pdf-export .organ-item, .pdf-export .incidental-item { color: #1e293b !important; }
-    .pdf-export .tag { background: #e2e8f0 !important; color: #475569 !important; }
-    .pdf-export .confidence-badge { border: 1px solid #cbd5e1 !important; }
-    .pdf-export .recist-badge { border: 1px solid #94a3b8 !important; }
-    .pdf-export .chevron { display: none !important; }
-  `;
-  wrapper.appendChild(style);
+  addLine("Clinical Report", { bold: true, size: 14 });
+  addLine(`Patient: ${r.patient_id}  |  Accession: ${r.accession_number}`, { size: 9 });
+  y += lineH;
 
-  const headerClone = header.cloneNode(true);
-  const sectionsClone = sections.cloneNode(true);
-  sectionsClone.querySelectorAll(".card-title").forEach((el) => el.classList.remove("collapsed"));
-  sectionsClone.querySelectorAll(".card-body").forEach((el) => {
-    el.classList.remove("collapsed");
-    el.style.maxHeight = "none";
-  });
-  wrapper.appendChild(headerClone);
-  wrapper.appendChild(sectionsClone);
-  document.body.appendChild(wrapper);
+  addSection("Clinical Information");
+  const ci = r.clinical_information;
+  if (ci.primary_diagnosis) addLine(`Primary diagnosis: ${ci.primary_diagnosis}`);
+  if (ci.clinical_context) addLine(`Context: ${ci.clinical_context}`);
+  if (ci.patient_sex) addLine(`Sex: ${ci.patient_sex}`);
+  if (ci.patient_age) addLine(`Age: ${ci.patient_age}`);
 
-  const filename = `rapport_${currentReport.patient_id}_${currentReport.accession_number}.pdf`;
-  const opt = {
-    margin: 12,
-    filename,
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, logging: false },
-    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-  };
+  addSection("Study Technique");
+  const st = r.study_technique;
+  if (st.study_description) addLine(st.study_description);
+  if (st.contrast || st.contrast_agent) addLine(`Contrast: ${[st.contrast, st.contrast_agent].filter(Boolean).join(" — ") || "—"}`);
+  if (st.scanner_model) addLine(`Scanner: ${st.scanner_model}`);
+  if (st.slice_thickness_mm) addLine(`Slice thickness: ${st.slice_thickness_mm} mm`);
+  if (st.comparison_study_date) addLine(`Comparison: ${st.comparison_study_date}`);
 
-  // Let the browser paint the wrapper before capture (avoids blank PDF)
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      html2pdf()
-        .set(opt)
-        .from(wrapper)
-        .save()
-        .then(() => {
-          wrapper.remove();
-          showToast("PDF téléchargé");
-        })
-        .catch((err) => {
-          wrapper.remove();
-          console.error(err);
-          showToast("Erreur export PDF");
-        });
+  addSection("Findings — Deterministic");
+  const det = r.report.report_determinist;
+  if (det.recist_conclusion) addLine(`RECIST 1.1: ${det.recist_conclusion}`);
+  if (det.lesions && det.lesions.length) {
+    det.lesions.forEach((l, i) => {
+      const dims = l.dimensions_mm ? l.dimensions_mm.map((d) => d.toFixed(1)).join(" × ") + " mm" : "—";
+      const evo = l.evolution || "—";
+      addLine(`${i + 1}. ${dims}  |  Evolution: ${evo}`);
     });
-  });
+  }
+
+  addSection("Findings — AI Agent");
+  const agt = r.report.report_agent;
+  if (agt.infiltration && (agt.infiltration.level || agt.infiltration.summary)) {
+    const inf = agt.infiltration;
+    const level = (inf.level || "none").replace(/_/g, " ");
+    addLine(`Infiltration: ${level}. ${inf.summary || ""}`);
+  }
+  if (agt.lesions && agt.lesions.length) {
+    agt.lesions.forEach((l, i) => addLine(`Lesion ${i + 1}: ${l.location} — ${l.characterization || "—"}`));
+  }
+  if (agt.organ_assessments && agt.organ_assessments.length) {
+    agt.organ_assessments.forEach((oa) => addLine(`${oa.is_normal ? "Normal" : "Abnormal"}: ${oa.organ} — ${oa.finding}`));
+  }
+  if (agt.negative_findings && agt.negative_findings.length) {
+    addLine("Negative findings: " + agt.negative_findings.join(", "));
+  }
+  if (agt.incidental_findings && agt.incidental_findings.length) {
+    agt.incidental_findings.forEach((inc) => addLine(`${inc.is_new ? "[NEW] " : ""}${inc.location}: ${inc.description}`));
+  }
+
+  addSection("Conclusions");
+  const c = r.conclusions;
+  if (c.recist_response) addLine(`RECIST response: ${c.recist_response}`);
+  if (c.recist_justification) addLine(c.recist_justification);
+  if (c.sum_of_diameters_mm != null) addLine(`Sum of diameters: ${c.sum_of_diameters_mm.toFixed(1)} mm`);
+  if (c.key_findings && c.key_findings.length) {
+    c.key_findings.forEach((kf) => addLine("• " + kf));
+  }
+  if (c.recommendation) addLine("Recommendation: " + c.recommendation);
+
+  const filename = `rapport_${r.patient_id}_${r.accession_number}.pdf`;
+  doc.save(filename);
+  showToast("PDF téléchargé");
 }
 
 function reportToText(r) {
