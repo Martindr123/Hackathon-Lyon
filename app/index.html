@@ -65,7 +65,7 @@
       <!-- Review wizard (interactive pipeline) -->
       <div id="review-container" style="display:none">
 
-        <!-- Progress bar -->
+        <!-- Progress bar + step navigation -->
         <div class="review-progress" id="review-progress">
           <div class="progress-steps">
             <div class="progress-step" data-step="0"><span class="step-num">1</span><span class="step-label">Lesions</span></div>
@@ -76,6 +76,11 @@
             <div class="progress-step" data-step="5"><span class="step-num">6</span><span class="step-label">Conclusions</span></div>
           </div>
           <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar-fill"></div></div>
+          <div class="step-nav">
+            <button type="button" id="btn-step-prev" class="btn-step-nav" title="Étape précédente" aria-label="Étape précédente">&#8592;</button>
+            <span class="step-nav-label" id="step-nav-label">Étape 1 / 1</span>
+            <button type="button" id="btn-step-next" class="btn-step-nav" title="Étape suivante" aria-label="Étape suivante">&#8594;</button>
+          </div>
         </div>
 
         <!-- Step status -->

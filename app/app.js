@@ -5,6 +5,10 @@ let selectedAccession = null;
 let currentReport = null;
 let currentSessionId = null;
 let currentStepData = null;
+let stepResults = [];
+let evidenceImagesByStep = {};
+let viewedStepIndex = 0;
+let currentStepIndex = -1;
 let evidenceImages = null;
 let eventSource = null;
 let volumeData = { images: [], total_slices: 0 };
@@ -46,6 +50,8 @@ $btnValidate.addEventListener("click", validateCurrentStep);
 $btnRefine.addEventListener("click", refineCurrentStep);
 $btnCopy.addEventListener("click", copyAsText);
 $btnExport.addEventListener("click", exportJSON);
+document.getElementById("btn-step-prev")?.addEventListener("click", goToStepPrev);
+document.getElementById("btn-step-next")?.addEventListener("click", goToStepNext);
 
 // ── API helpers ───────────────────────────────────────────
 async function api(method, path, body) {
@@ -136,6 +142,10 @@ function hideAll() {
   $reviewContainer.style.display = "none";
   disposeVolume();
   previousComparisonData = null;
+  stepResults = [];
+  evidenceImagesByStep = {};
+  viewedStepIndex = 0;
+  currentStepIndex = -1;
 }
 
 async function startInteractive() {
@@ -210,13 +220,18 @@ function handleSSEEvent(type, data) {
 
   else if (type === "step_result") {
     currentStepData = data;
+    stepResults[data.step_index] = data;
+    currentStepIndex = data.step_index;
+    viewedStepIndex = data.step_index;
     $reviewStatus.style.display = "none";
-    updateProgressBar(data.step_index);
+    updateProgressBar(viewedStepIndex, currentStepIndex);
     renderProposal(data);
-    loadEvidenceImages(data.session_id);
+    loadEvidenceImages(data.session_id).then(function () {
+      evidenceImagesByStep[data.step_index] = evidenceImages ? evidenceImages.slice() : [];
+    });
     if (!volumeLoaded) loadVolume(data.session_id);
-    $reviewActions.style.display = "flex";
-    if ($reviewRefine) $reviewRefine.style.display = "block";
+    updateStepNav();
+    updateActionsVisibility();
     if ($refineError) $refineError.textContent = "";
     if ($refineStatus) $refineStatus.textContent = "";
   }
@@ -424,6 +439,7 @@ async function refineCurrentStep() {
       return;
     }
     currentStepData = body;
+    if (currentStepIndex >= 0) stepResults[currentStepIndex] = body;
     renderProposal(body);
     loadEvidenceImages(currentSessionId);
     if ($reviewActions) $reviewActions.style.display = "flex";
@@ -438,15 +454,65 @@ async function refineCurrentStep() {
   if ($btnRefine) $btnRefine.disabled = false;
 }
 
-// ── Progress bar ──────────────────────────────────────────
-function updateProgressBar(activeStep) {
+// ── Progress bar & step navigation ───────────────────────
+function updateProgressBar(viewedStep, latestStep) {
+  if (latestStep == null) latestStep = viewedStep;
   document.querySelectorAll(".progress-step").forEach((el) => {
     const s = parseInt(el.dataset.step);
-    el.classList.toggle("active", s === activeStep);
-    el.classList.toggle("done", s < activeStep);
+    el.classList.toggle("active", s === viewedStep);
+    el.classList.toggle("done", s < latestStep);
   });
-  const pct = activeStep < 0 ? 0 : ((activeStep + 1) / 6) * 100;
+  const pct = latestStep < 0 ? 0 : ((latestStep + 1) / 6) * 100;
   document.getElementById("progress-bar-fill").style.width = pct + "%";
+}
+
+function updateStepNav() {
+  const $prev = document.getElementById("btn-step-prev");
+  const $next = document.getElementById("btn-step-next");
+  const $label = document.getElementById("step-nav-label");
+  if ($prev) $prev.disabled = viewedStepIndex <= 0;
+  if ($next) $next.disabled = currentStepIndex < 0 || viewedStepIndex >= currentStepIndex;
+  if ($label) $label.textContent = `Étape ${viewedStepIndex + 1} / ${Math.max(1, currentStepIndex + 1)}`;
+}
+
+function updateActionsVisibility() {
+  const isViewingCurrent = viewedStepIndex === currentStepIndex;
+  if ($reviewActions) $reviewActions.style.display = isViewingCurrent ? "flex" : "none";
+  if ($reviewRefine) $reviewRefine.style.display = isViewingCurrent ? "block" : "none";
+}
+
+function applyCarouselForViewedStep() {
+  const stored = evidenceImagesByStep[viewedStepIndex];
+  if (stored && stored.length) {
+    evidenceImages = stored;
+    renderImageCarousel(evidenceImages);
+  }
+}
+
+function goToStepPrev() {
+  if (viewedStepIndex <= 0) return;
+  viewedStepIndex--;
+  const data = stepResults[viewedStepIndex];
+  if (data) {
+    updateProgressBar(viewedStepIndex, currentStepIndex);
+    renderProposal(data);
+    applyCarouselForViewedStep();
+    updateStepNav();
+    updateActionsVisibility();
+  }
+}
+
+function goToStepNext() {
+  if (currentStepIndex < 0 || viewedStepIndex >= currentStepIndex) return;
+  viewedStepIndex++;
+  const data = stepResults[viewedStepIndex];
+  if (data) {
+    updateProgressBar(viewedStepIndex, currentStepIndex);
+    renderProposal(data);
+    applyCarouselForViewedStep();
+    updateStepNav();
+    updateActionsVisibility();
+  }
 }
 
 // ── Image carousel ────────────────────────────────────────
