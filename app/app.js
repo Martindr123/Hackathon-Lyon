@@ -7,6 +7,11 @@ let currentSessionId = null;
 let currentStepData = null;
 let evidenceImages = null;
 let eventSource = null;
+let volumeData = { images: [], total_slices: 0 };
+let volumeLoaded = false;
+let volumeSliceIndex = 0;
+let patientExams = [];
+let previousComparisonData = null;
 
 // ── DOM refs ──────────────────────────────────────────────
 const $patientList = document.getElementById("patient-list");
@@ -88,6 +93,7 @@ async function loadExams(pid) {
   $examTimeline.innerHTML = '<div class="skeleton-line"></div>';
   try {
     const exams = await api("GET", `/patients/${pid}/exams`);
+    patientExams = exams || [];
     $examTimeline.innerHTML = "";
     exams.forEach((exam) => {
       const el = document.createElement("div");
@@ -128,6 +134,8 @@ function hideAll() {
   $loadingOverlay.style.display = "none";
   $reportContainer.style.display = "none";
   $reviewContainer.style.display = "none";
+  disposeVolume();
+  previousComparisonData = null;
 }
 
 async function startInteractive() {
@@ -195,7 +203,9 @@ function handleSSEEvent(type, data) {
   if (type === "session_init") {
     currentSessionId = data.session_id;
     $reviewStatus.innerHTML = '<div class="spinner spinner-sm"></div><span>Running first agent&hellip;</span>';
+    $reviewImages.style.display = "";
     loadEvidenceImages(data.session_id);
+    loadVolume(data.session_id);
   }
 
   else if (type === "step_result") {
@@ -204,6 +214,7 @@ function handleSSEEvent(type, data) {
     updateProgressBar(data.step_index);
     renderProposal(data);
     loadEvidenceImages(data.session_id);
+    if (!volumeLoaded) loadVolume(data.session_id);
     $reviewActions.style.display = "flex";
     if ($reviewRefine) $reviewRefine.style.display = "block";
     if ($refineError) $refineError.textContent = "";
@@ -236,6 +247,136 @@ async function loadEvidenceImages(sessionId) {
   } catch (e) {
     console.error("Failed to load evidence images:", e);
   }
+}
+
+async function loadVolume(sessionId) {
+  if (volumeLoaded) return;
+  const $img = document.getElementById("image-viewer-img");
+  const $volumeViewer = document.getElementById("volume-viewer");
+  const $loading = document.getElementById("volume-loading");
+  const $info = document.getElementById("volume-info");
+  if (!$volumeViewer) return;
+  if ($loading) $loading.style.display = "flex";
+  try {
+    const res = await api("GET", `/generate/${sessionId}/volume?max_slices=80`);
+    volumeData = { images: res.images || [], total_slices: res.total_slices || 0 };
+    if ($loading) $loading.style.display = "none";
+    if (volumeData.images.length === 0) return;
+    volumeLoaded = true;
+    if ($img) $img.style.display = "none";
+    $volumeViewer.style.display = "flex";
+    if ($info) $info.style.display = "block";
+    const $total = document.getElementById("volume-total");
+    if ($total) $total.textContent = volumeData.total_slices;
+    const slider = document.getElementById("volume-side-slider");
+    if (slider) {
+      slider.min = 0;
+      slider.max = volumeData.images.length - 1;
+      slider.value = 0;
+      slider.addEventListener("input", function () { showVolumeSlice(parseInt(this.value, 10)); });
+    }
+    const $volImg = document.getElementById("volume-viewer-img");
+    if ($volImg) {
+      $volImg.addEventListener("wheel", function (e) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 1 : -1;
+        showVolumeSlice(volumeSliceIndex + delta);
+      }, { passive: false });
+    }
+    showVolumeSlice(0);
+    loadComparison();
+  } catch (e) {
+    console.error("Failed to load volume:", e);
+    if ($loading) $loading.style.display = "none";
+  }
+}
+
+function showVolumeSlice(idx) {
+  if (!volumeData.images.length) return;
+  idx = Math.max(0, Math.min(idx, volumeData.images.length - 1));
+  volumeSliceIndex = idx;
+  const img = volumeData.images[idx];
+  const $volImg = document.getElementById("volume-viewer-img");
+  if ($volImg) $volImg.src = "data:image/png;base64," + img.base64;
+  const gIdx = img.global_index != null ? img.global_index + 1 : idx + 1;
+  const $cur = document.getElementById("volume-current");
+  if ($cur) $cur.textContent = gIdx;
+  const slider = document.getElementById("volume-side-slider");
+  if (slider) slider.value = idx;
+  updateComparisonSlice(idx);
+}
+
+async function loadComparison() {
+  if (!selectedPatient || !selectedAccession || !patientExams.length) return;
+  const idx = patientExams.findIndex((e) => e.accession_number === selectedAccession);
+  if (idx <= 0) return;
+  const prevExam = patientExams[idx - 1];
+  const prevAccession = prevExam.accession_number;
+  const $placeholder = document.getElementById("comparison-placeholder");
+  const $loading = document.getElementById("comparison-loading");
+  const $viewer = document.getElementById("comparison-viewer");
+  const $info = document.getElementById("comparison-info");
+  if ($placeholder) $placeholder.style.display = "none";
+  if ($loading) $loading.style.display = "flex";
+  try {
+    const res = await api("GET", `/patients/${selectedPatient}/exams/${prevAccession}/comparison`);
+    previousComparisonData = res;
+    if ($loading) $loading.style.display = "none";
+    if (!res.volume || !res.volume.images || res.volume.images.length === 0) {
+      if ($placeholder) { $placeholder.textContent = "Aucun volume pour l'examen précédent"; $placeholder.style.display = "flex"; }
+      return;
+    }
+    const vol = res.volume;
+    $viewer.style.display = "flex";
+    $info.style.display = "block";
+    const $total = document.getElementById("comparison-total");
+    if ($total) $total.textContent = vol.total_slices;
+    const slider = document.getElementById("comparison-side-slider");
+    if (slider) {
+      slider.min = 0;
+      slider.max = vol.images.length - 1;
+      slider.value = 0;
+      slider.disabled = true;
+    }
+    updateComparisonSlice(volumeSliceIndex);
+  } catch (e) {
+    console.error("Failed to load comparison:", e);
+    if ($loading) $loading.style.display = "none";
+    if ($placeholder) { $placeholder.textContent = "Impossible de charger l'examen précédent"; $placeholder.style.display = "flex"; }
+  }
+}
+
+function updateComparisonSlice(leftIndex) {
+  if (!previousComparisonData || !previousComparisonData.volume || !previousComparisonData.volume.images.length) return;
+  const vol = previousComparisonData.volume.images;
+  const rightIndex = Math.min(Math.max(0, leftIndex), vol.length - 1);
+  const img = vol[rightIndex];
+  const $cmpImg = document.getElementById("comparison-viewer-img");
+  if ($cmpImg) $cmpImg.src = "data:image/png;base64," + img.base64;
+  const gIdx = img.global_index != null ? img.global_index + 1 : rightIndex + 1;
+  const $cur = document.getElementById("comparison-current");
+  if ($cur) $cur.textContent = gIdx;
+  const slider = document.getElementById("comparison-side-slider");
+  if (slider) slider.value = rightIndex;
+}
+
+function disposeVolume() {
+  volumeLoaded = false;
+  volumeData = { images: [], total_slices: 0 };
+  volumeSliceIndex = 0;
+  previousComparisonData = null;
+  const $volumeViewer = document.getElementById("volume-viewer");
+  const $img = document.getElementById("image-viewer-img");
+  const $info = document.getElementById("volume-info");
+  if ($volumeViewer) $volumeViewer.style.display = "none";
+  if ($info) $info.style.display = "none";
+  if ($img) $img.style.display = "";
+  const $placeholder = document.getElementById("comparison-placeholder");
+  const $cmpViewer = document.getElementById("comparison-viewer");
+  const $cmpInfo = document.getElementById("comparison-info");
+  if ($placeholder) { $placeholder.style.display = "flex"; $placeholder.textContent = "Aucun examen précédent"; }
+  if ($cmpViewer) $cmpViewer.style.display = "none";
+  if ($cmpInfo) $cmpInfo.style.display = "none";
 }
 
 async function validateCurrentStep() {
@@ -323,16 +464,42 @@ function renderImageCarousel(images) {
     if (img.is_best_slice) {
       thumb.innerHTML += `<span class="thumb-badge">S${img.segment}</span>`;
     }
-    thumb.addEventListener("click", () => showImage(i));
+    thumb.addEventListener("click", () => onCarouselThumbClick(i));
     $thumbs.appendChild(thumb);
   });
-  showImage(images.findIndex(i => i.is_best_slice) || 0);
+  if (!volumeLoaded) showImage(images.findIndex(i => i.is_best_slice) || 0);
+}
+
+function onCarouselThumbClick(idx) {
+  if (!evidenceImages || idx < 0) return;
+  document.querySelectorAll(".image-thumb").forEach((el, i) => {
+    el.classList.toggle("selected", i === idx);
+  });
+  if (volumeLoaded && volumeData.images.length) {
+    const wantGlobal = evidenceImages[idx].global_index;
+    if (wantGlobal != null) {
+      let bestJ = 0;
+      let bestDist = Infinity;
+      volumeData.images.forEach((img, j) => {
+        const g = img.global_index != null ? img.global_index : j;
+        const d = Math.abs(g - wantGlobal);
+        if (d < bestDist) {
+          bestDist = d;
+          bestJ = j;
+        }
+      });
+      showVolumeSlice(bestJ);
+    }
+  } else {
+    showImage(idx);
+  }
 }
 
 function showImage(idx) {
-  if (!evidenceImages || idx < 0) return;
+  if (!evidenceImages || idx < 0 || volumeLoaded) return;
   const img = evidenceImages[idx];
-  document.getElementById("image-viewer-img").src = "data:image/png;base64," + img.base64;
+  const $imgEl = document.getElementById("image-viewer-img");
+  if ($imgEl) $imgEl.src = "data:image/png;base64," + img.base64;
   document.getElementById("image-viewer-label").textContent = img.label || "";
   const $reason = document.getElementById("image-viewer-reason");
   if ($reason) $reason.textContent = img.reason || "";
@@ -415,8 +582,7 @@ function renderLesionsForm(lesions) {
         <input type="text" class="form-input" name="location" value="${esc(l.location)}" />
         <label class="form-label">Characterization</label>
         <textarea class="form-textarea" name="characterization" rows="3">${esc(l.characterization || "")}</textarea>
-        <label class="form-label">Confidence: <span class="conf-val">${(l.confidence * 100).toFixed(0)}%</span></label>
-        <input type="range" class="form-range" name="confidence" min="0" max="100" value="${(l.confidence * 100).toFixed(0)}" oninput="this.previousElementSibling.querySelector('.conf-val').textContent=this.value+'%'" />
+        ${confDisplayRow(Math.round((l.confidence || 0) * 100), "confidence")}
       </div>`;
   });
   html += '</div>';
@@ -439,8 +605,7 @@ function addLesion() {
     <input type="text" class="form-input" name="location" value="" />
     <label class="form-label">Characterization</label>
     <textarea class="form-textarea" name="characterization" rows="3"></textarea>
-    <label class="form-label">Confidence: <span class="conf-val">50%</span></label>
-    <input type="range" class="form-range" name="confidence" min="0" max="100" value="50" oninput="this.previousElementSibling.querySelector('.conf-val').textContent=this.value+'%'" />
+    ${confDisplayRow(50, "confidence")}
   `;
   list.appendChild(card);
 }
@@ -456,8 +621,7 @@ function renderInfiltrationForm(inf) {
   let html = '<div id="form-infiltration">';
   html += `<label class="form-label">Summary</label>
     <textarea class="form-textarea" name="summary" rows="2">${esc(inf.summary || "")}</textarea>`;
-  html += `<label class="form-label">Confidence: <span class="conf-val">${(inf.confidence * 100).toFixed(0)}%</span></label>
-    <input type="range" class="form-range" name="confidence" min="0" max="100" value="${(inf.confidence * 100).toFixed(0)}" oninput="this.previousElementSibling.querySelector('.conf-val').textContent=this.value+'%'" />`;
+  html += confDisplayRow(Math.round((inf.confidence || 0) * 100), "confidence");
 
   if (inf.indicators && inf.indicators.length) {
     html += '<div class="form-label" style="margin-top:.8rem">Indicators</div>';
@@ -481,8 +645,7 @@ function renderInfiltrationForm(inf) {
 function renderNegativeFindingsForm(data) {
   const findings = data.findings || [];
   let html = '<div id="form-neg-findings">';
-  html += `<label class="form-label">Confidence: <span class="conf-val">${(data.confidence * 100).toFixed(0)}%</span></label>
-    <input type="range" class="form-range" name="confidence" min="0" max="100" value="${(data.confidence * 100).toFixed(0)}" oninput="this.previousElementSibling.querySelector('.conf-val').textContent=this.value+'%'" />`;
+  html += confDisplayRow(Math.round((data.confidence || 0) * 100), "confidence");
   html += '<div class="form-label">Findings (uncheck to remove)</div>';
   findings.forEach((nf, i) => {
     html += `
@@ -601,8 +764,7 @@ function renderConclusionsForm(data) {
   html += '<button class="btn btn-secondary btn-add" onclick="addKeyFinding()" style="margin-bottom:.75rem">+ Add finding</button>';
   html += `<label class="form-label">Recommendation</label>
     <textarea class="form-textarea" name="recommendation" rows="3">${esc(data.recommendation || "")}</textarea>`;
-  html += `<label class="form-label">Confidence: <span class="conf-val">${((data.conclusions_confidence || 0.5) * 100).toFixed(0)}%</span></label>
-    <input type="range" class="form-range" name="confidence" min="0" max="100" value="${((data.conclusions_confidence || 0.5) * 100).toFixed(0)}" oninput="this.previousElementSibling.querySelector('.conf-val').textContent=this.value+'%'" />`;
+  html += confDisplayRow(Math.round(((data.conclusions_confidence || 0.5) * 100)), "confidence");
   html += '</div>';
   return html;
 }
@@ -839,7 +1001,12 @@ function confBadge(score) {
   if (score == null) return "";
   const pct = Math.round(score * 100);
   const cls = score >= 0.7 ? "conf-high" : score >= 0.4 ? "conf-med" : "conf-low";
-  return `<span class="confidence-badge ${cls}"><span class="conf-bar"><span class="conf-fill" style="width:${pct}%"></span></span>${pct}%</span>`;
+  return `<span class="confidence-badge ${cls}"><span class="conf-donut" style="--pct: ${pct}%"></span>${pct}%</span>`;
+}
+
+function confDisplayRow(pct, name) {
+  const cls = pct >= 70 ? "conf-high" : pct >= 40 ? "conf-med" : "conf-low";
+  return `<div class="conf-display-row"><span class="form-label">Confidence</span><span class="confidence-badge ${cls}"><span class="conf-donut" style="--pct: ${pct}%"></span>${pct}%</span><input type="hidden" name="${name}" value="${pct}" /></div>`;
 }
 
 function renderInfiltration(inf) {

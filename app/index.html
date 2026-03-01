@@ -84,12 +84,45 @@
           <span>Running agent&hellip;</span>
         </div>
 
-        <!-- Image carousel -->
+        <!-- Image carousel + volume slider -->
         <div class="review-images" id="review-images">
           <div class="image-thumbnails" id="image-thumbnails"></div>
           <div class="image-viewer" id="image-viewer">
-            <img id="image-viewer-img" alt="CT slice" />
-            <div class="image-viewer-label" id="image-viewer-label"></div>
+            <div class="viewer-split">
+              <div class="viewer-panel viewer-current">
+                <div class="viewer-panel-title">Examen courant</div>
+                <img id="image-viewer-img" alt="CT slice" />
+                <div id="volume-viewer" class="volume-viewer" style="display:none">
+                  <img id="volume-viewer-img" class="volume-viewer-img" alt="Volume slice" />
+                  <div class="volume-side-slider-wrap">
+                    <span class="volume-side-top">Haut</span>
+                    <input type="range" id="volume-side-slider" class="volume-side-slider" min="0" max="0" value="0" />
+                    <span class="volume-side-bottom">Bas</span>
+                  </div>
+                </div>
+                <div id="volume-loading" class="volume-loading-inline" style="display:none">Chargement du volume&hellip;</div>
+                <div class="volume-info" id="volume-info" style="display:none">
+                  Tranche <span id="volume-current">1</span> / <span id="volume-total">1</span> &mdash; Molette ou curseur pour naviguer
+                </div>
+                <div class="image-viewer-label" id="image-viewer-label"></div>
+              </div>
+              <div class="viewer-panel viewer-previous" id="viewer-previous">
+                <div class="viewer-panel-title">Examen précédent</div>
+                <div id="comparison-placeholder" class="comparison-placeholder">Aucun examen précédent</div>
+                <div id="comparison-viewer" class="volume-viewer comparison-viewer" style="display:none">
+                  <img id="comparison-viewer-img" class="volume-viewer-img" alt="Examen précédent" />
+                  <div class="volume-side-slider-wrap">
+                    <span class="volume-side-top">Haut</span>
+                    <input type="range" id="comparison-side-slider" class="volume-side-slider" min="0" max="0" value="0" disabled />
+                    <span class="volume-side-bottom">Bas</span>
+                  </div>
+                </div>
+                <div id="comparison-loading" class="volume-loading-inline" style="display:none">Chargement&hellip;</div>
+                <div class="volume-info comparison-info" id="comparison-info" style="display:none">
+                  Tranche <span id="comparison-current">1</span> / <span id="comparison-total">1</span>
+                </div>
+              </div>
+            </div>
             <div class="image-viewer-reason" id="image-viewer-reason"></div>
           </div>
           <div class="image-legend" id="image-legend"></div>

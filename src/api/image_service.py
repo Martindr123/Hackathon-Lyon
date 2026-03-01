@@ -83,7 +83,8 @@ def generate_evidence_images(
     """Generate base64 evidence images for the review UI.
 
     Returns a list of dicts:
-        {"base64": str, "label": str, "is_best_slice": bool, "segment": int|None}
+        {"base64": str, "label": str, "is_best_slice": bool, "segment": int|None,
+         "reason": str, "global_index": int}
     """
     seg_arr = None
     if seg_path:
@@ -133,6 +134,7 @@ def generate_evidence_images(
                 "is_best_slice": is_best,
                 "segment": seg_num,
                 "reason": reason,
+                "global_index": idx,
             }
         )
 

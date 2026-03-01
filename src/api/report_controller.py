@@ -338,3 +338,86 @@ def get_session_images(session_id: str):
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"images": session.evidence_images}
+
+
+@router.get("/generate/{session_id}/volume")
+def get_session_volume(session_id: str, max_slices: int = 80):
+    """Return a downsampled stack of slice images for 3D volume navigation.
+
+    Uses all slices from the series, downsampled to max_slices (default 80).
+    Each image includes global_index (0-based in full series) for display.
+    """
+    from src.api.image_service import generate_evidence_images
+
+    session = get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    series_files = session.exam_context.series_files
+    if not series_files:
+        return {"images": [], "total_slices": 0}
+    n = len(series_files)
+    if max_slices >= n:
+        indices = list(range(n))
+    else:
+        step = (n - 1) / (max_slices - 1) if max_slices > 1 else 0
+        indices = sorted({int(round(i * step)) for i in range(max_slices)})
+    image_paths = [series_files[i] for i in indices]
+    images = generate_evidence_images(
+        image_paths,
+        session.exam_context.seg_path,
+        series_files,
+        best_slice_indices=None,
+    )
+    for i, img in enumerate(images):
+        img["global_index"] = indices[i]
+    return {"images": images, "total_slices": n}
+
+
+@router.get("/patients/{patient_id}/exams/{accession_number}/comparison")
+def get_exam_comparison(patient_id: str, accession_number: int, max_slices: int = 80):
+    """Return evidence images and volume for an exam (for temporal comparison).
+
+    Used to display the \"previous\" exam next to the current one. Same structure
+    as session images/volume but without requiring a session.
+    """
+    from src.api.image_service import generate_evidence_images
+
+    ctx = build_exam_context(
+        patient_id,
+        accession_number,
+        max_slices=8,
+        examen_repo=_examen_repo,
+        data_repo=_data_repo,
+    )
+    if not ctx.series_files:
+        return {
+            "evidence_images": [],
+            "volume": {"images": [], "total_slices": 0},
+        }
+    best_indices = [m.best_slice_index for m in ctx.seg_measurements]
+    evidence_images = generate_evidence_images(
+        ctx.image_paths,
+        ctx.seg_path,
+        ctx.series_files,
+        best_slice_indices=best_indices if best_indices else None,
+    )
+    series_files = ctx.series_files
+    n = len(series_files)
+    if max_slices >= n:
+        indices = list(range(n))
+    else:
+        step = (n - 1) / (max_slices - 1) if max_slices > 1 else 0
+        indices = sorted({int(round(i * step)) for i in range(max_slices)})
+    image_paths = [series_files[i] for i in indices]
+    volume_images = generate_evidence_images(
+        image_paths,
+        ctx.seg_path,
+        series_files,
+        best_slice_indices=None,
+    )
+    for i, img in enumerate(volume_images):
+        img["global_index"] = indices[i]
+    return {
+        "evidence_images": evidence_images,
+        "volume": {"images": volume_images, "total_slices": n},
+    }
