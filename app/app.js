@@ -16,6 +16,7 @@ let volumeLoaded = false;
 let volumeSliceIndex = 0;
 let patientExams = [];
 let previousComparisonData = null;
+let viewingStepsAfterComplete = false;
 
 // ── DOM refs ──────────────────────────────────────────────
 const $patientList = document.getElementById("patient-list");
@@ -40,6 +41,10 @@ const $refineError = document.getElementById("refine-error");
 const $refineStatus = document.getElementById("refine-status");
 const $btnCopy = document.getElementById("btn-copy");
 const $btnExport = document.getElementById("btn-export");
+const $btnExportPdf = document.getElementById("btn-export-pdf");
+const $btnBackToSteps = document.getElementById("btn-back-to-steps");
+const $btnBackToReport = document.getElementById("btn-back-to-report");
+const $stepNavBackReport = document.getElementById("step-nav-back-report");
 
 // ── Init ──────────────────────────────────────────────────
 loadPatients();
@@ -50,6 +55,9 @@ $btnValidate.addEventListener("click", validateCurrentStep);
 $btnRefine.addEventListener("click", refineCurrentStep);
 $btnCopy.addEventListener("click", copyAsText);
 $btnExport.addEventListener("click", exportJSON);
+$btnExportPdf?.addEventListener("click", exportPDF);
+$btnBackToSteps?.addEventListener("click", backToSteps);
+$btnBackToReport?.addEventListener("click", backToReport);
 document.getElementById("btn-step-prev")?.addEventListener("click", goToStepPrev);
 document.getElementById("btn-step-next")?.addEventListener("click", goToStepNext);
 
@@ -146,6 +154,7 @@ function hideAll() {
   evidenceImagesByStep = {};
   viewedStepIndex = 0;
   currentStepIndex = -1;
+  viewingStepsAfterComplete = false;
 }
 
 async function startInteractive() {
@@ -238,7 +247,9 @@ function handleSSEEvent(type, data) {
 
   else if (type === "complete") {
     currentReport = data.report;
-    hideAll();
+    $emptyState.style.display = "none";
+    $loadingOverlay.style.display = "none";
+    $reviewContainer.style.display = "none";
     $reportContainer.style.display = "";
     renderReport(data.report);
     $btnGenerate.disabled = false;
@@ -476,9 +487,37 @@ function updateStepNav() {
 }
 
 function updateActionsVisibility() {
+  const hideActions = viewingStepsAfterComplete;
   const isViewingCurrent = viewedStepIndex === currentStepIndex;
-  if ($reviewActions) $reviewActions.style.display = isViewingCurrent ? "flex" : "none";
-  if ($reviewRefine) $reviewRefine.style.display = isViewingCurrent ? "block" : "none";
+  if ($reviewActions) $reviewActions.style.display = hideActions || !isViewingCurrent ? "none" : "flex";
+  if ($reviewRefine) $reviewRefine.style.display = hideActions || !isViewingCurrent ? "none" : "block";
+}
+
+function backToSteps() {
+  if (!stepResults.length) return;
+  viewingStepsAfterComplete = true;
+  $reportContainer.style.display = "none";
+  $reviewContainer.style.display = "";
+  if ($stepNavBackReport) $stepNavBackReport.style.display = "";
+  viewedStepIndex = currentStepIndex >= 0 ? currentStepIndex : 0;
+  const data = stepResults[viewedStepIndex];
+  if ($reviewStatus) {
+    $reviewStatus.style.display = "flex";
+    $reviewStatus.innerHTML = "<span>Rapport généré. Parcourez les étapes avec les flèches.</span>";
+  }
+  if (data) {
+    updateProgressBar(viewedStepIndex, currentStepIndex);
+    renderProposal(data);
+    applyCarouselForViewedStep();
+  }
+  updateStepNav();
+  updateActionsVisibility();
+}
+
+function backToReport() {
+  $reviewContainer.style.display = "none";
+  $reportContainer.style.display = "";
+  if ($stepNavBackReport) $stepNavBackReport.style.display = "none";
 }
 
 function applyCarouselForViewedStep() {
@@ -1160,6 +1199,87 @@ function exportJSON() {
   a.click();
   URL.revokeObjectURL(url);
   showToast("JSON exported");
+}
+
+function exportPDF() {
+  if (!currentReport) {
+    showToast("No report to export");
+    return;
+  }
+  if (typeof html2pdf === "undefined") {
+    showToast("PDF library not loaded");
+    return;
+  }
+  const header = document.getElementById("report-header");
+  const sections = document.querySelector("#report-container .report-sections");
+  if (!header || !sections) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "pdf-export";
+  // Must be in viewport for html2canvas to capture (off-screen = blank PDF)
+  wrapper.style.cssText = "position:fixed;top:0;left:0;z-index:-1;width:210mm;max-width:210mm;min-height:100vh;background:#fff;color:#1e293b;padding:20px;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif;";
+
+  const style = document.createElement("style");
+  style.textContent = `
+    .pdf-export .report-header h2 { color: #0f172a; font-size: 1.4rem; }
+    .pdf-export .report-header-meta { color: #475569; }
+    .pdf-export .report-card { background: #f8fafc !important; border: 1px solid #e2e8f0 !important; margin-bottom: 12px; }
+    .pdf-export .card-title { color: #0f172a !important; background: #f1f5f9 !important; border-left-color: #64748b !important; }
+    .pdf-export .card-title--blue { border-left-color: #2563eb !important; }
+    .pdf-export .card-title--purple { border-left-color: #7c3aed !important; }
+    .pdf-export .card-body { border-top-color: #e2e8f0 !important; }
+    .pdf-export .kv-item { background: #fff !important; border: 1px solid #e2e8f0; }
+    .pdf-export .kv-label { color: #64748b !important; }
+    .pdf-export .kv-value { color: #1e293b !important; }
+    .pdf-export .lesion-table th { color: #64748b !important; border-bottom-color: #e2e8f0 !important; }
+    .pdf-export .lesion-table td { border-bottom-color: #f1f5f9 !important; }
+    .pdf-export .agent-subsection-title { color: #334155 !important; }
+    .pdf-export .infiltration-box, .pdf-export .organ-item, .pdf-export .incidental-item { color: #1e293b !important; }
+    .pdf-export .tag { background: #e2e8f0 !important; color: #475569 !important; }
+    .pdf-export .confidence-badge { border: 1px solid #cbd5e1 !important; }
+    .pdf-export .recist-badge { border: 1px solid #94a3b8 !important; }
+    .pdf-export .chevron { display: none !important; }
+  `;
+  wrapper.appendChild(style);
+
+  const headerClone = header.cloneNode(true);
+  const sectionsClone = sections.cloneNode(true);
+  sectionsClone.querySelectorAll(".card-title").forEach((el) => el.classList.remove("collapsed"));
+  sectionsClone.querySelectorAll(".card-body").forEach((el) => {
+    el.classList.remove("collapsed");
+    el.style.maxHeight = "none";
+  });
+  wrapper.appendChild(headerClone);
+  wrapper.appendChild(sectionsClone);
+  document.body.appendChild(wrapper);
+
+  const filename = `rapport_${currentReport.patient_id}_${currentReport.accession_number}.pdf`;
+  const opt = {
+    margin: 12,
+    filename,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, logging: false },
+    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+  };
+
+  // Let the browser paint the wrapper before capture (avoids blank PDF)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      html2pdf()
+        .set(opt)
+        .from(wrapper)
+        .save()
+        .then(() => {
+          wrapper.remove();
+          showToast("PDF téléchargé");
+        })
+        .catch((err) => {
+          wrapper.remove();
+          console.error(err);
+          showToast("Erreur export PDF");
+        });
+    });
+  });
 }
 
 function reportToText(r) {

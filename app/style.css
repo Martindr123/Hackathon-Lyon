@@ -796,6 +796,11 @@ body {
   min-width: 8rem;
   text-align: center;
 }
+.step-nav-back-report {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: center;
+}
 
 /* ── Review status ────────────────────────────────────── */
 .review-status {

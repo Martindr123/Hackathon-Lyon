@@ -81,6 +81,9 @@
             <span class="step-nav-label" id="step-nav-label">Étape 1 / 1</span>
             <button type="button" id="btn-step-next" class="btn-step-nav" title="Étape suivante" aria-label="Étape suivante">&#8594;</button>
           </div>
+          <div class="step-nav-back-report" id="step-nav-back-report" style="display:none">
+            <button type="button" id="btn-back-to-report" class="btn btn-secondary">&#8594; Retour au rapport</button>
+          </div>
         </div>
 
         <!-- Step status -->
@@ -205,7 +208,9 @@
         </div>
 
         <div class="action-bar">
+          <button id="btn-back-to-steps" class="btn btn-secondary">&#8592; Revoir les étapes</button>
           <button id="btn-copy" class="btn btn-secondary">&#128203; Copy as text</button>
+          <button id="btn-export-pdf" class="btn btn-secondary">&#128196; Export PDF</button>
           <button id="btn-export" class="btn btn-secondary">&#128229; Export JSON</button>
         </div>
 
@@ -213,6 +218,7 @@
     </main>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="/app/app.js"></script>
 </body>
 </html>
