@@ -106,9 +106,9 @@ def _compute_v_recist(
 
 
 def _classify_trend(trend: list[TrendPoint]) -> str | None:
-    """Classify the overall trajectory from ≥ 3 data points."""
+    """Classify the overall trajectory from ≥ 2 data points."""
     sums = [t.sum_of_diameters_mm for t in trend if t.sum_of_diameters_mm is not None]
-    if len(sums) < 3:
+    if len(sums) < 2:
         return None
 
     deltas = [sums[i] - sums[i - 1] for i in range(1, len(sums))]
@@ -242,9 +242,17 @@ def build_advanced_metrics(
         logger.warning("No exam found for accession %s", accession_number)
         return AdvancedMetrics()
 
+    if current_exam.study_date is None:
+        current_exam.study_date = data_repo.get_study_date(patient_id, accession_number)
+
     previous_exam = _find_previous_exam(
         examen_repo, patient_id, accession_number, data_repo
     )
+
+    if previous_exam and previous_exam.study_date is None:
+        previous_exam.study_date = data_repo.get_study_date(
+            patient_id, previous_exam.accession_number
+        )
 
     current_seg = _get_seg_info(data_repo, patient_id, accession_number)
     previous_seg = (
