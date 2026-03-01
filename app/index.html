@@ -8,7 +8,7 @@
 </head>
 <body>
 
-  <!-- ── Top bar ──────────────────────────────────────── -->
+  <!-- Top bar -->
   <header class="topbar">
     <div class="topbar-brand">
       <span class="topbar-icon">+</span>
@@ -19,7 +19,7 @@
 
   <div class="layout">
 
-    <!-- ── Sidebar ──────────────────────────────────── -->
+    <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <section class="sidebar-section">
         <h2 class="sidebar-title">Patients</h2>
@@ -39,10 +39,13 @@
         <button id="btn-generate" class="btn btn-primary" disabled>
           <span class="btn-icon">&#9654;</span> Generate Report
         </button>
+        <button id="btn-quick-generate" class="btn btn-secondary" disabled style="width:100%;margin-top:.4rem;font-size:.75rem">
+          Quick Generate (skip review)
+        </button>
       </div>
     </aside>
 
-    <!-- ── Main content ─────────────────────────────── -->
+    <!-- Main content -->
     <main class="main" id="main">
 
       <!-- Empty state -->
@@ -52,20 +55,73 @@
         <p>Pick a patient from the sidebar, choose an examination, then click <strong>Generate Report</strong>.</p>
       </div>
 
-      <!-- Loading overlay -->
+      <!-- Loading overlay (for quick generate) -->
       <div id="loading-overlay" class="loading-overlay" style="display:none">
         <div class="spinner"></div>
         <p class="loading-text">Generating report&hellip;</p>
         <p class="loading-sub">Deterministic analysis + LLM agents (~30s)</p>
       </div>
 
-      <!-- Report container -->
+      <!-- Review wizard (interactive pipeline) -->
+      <div id="review-container" style="display:none">
+
+        <!-- Progress bar -->
+        <div class="review-progress" id="review-progress">
+          <div class="progress-steps">
+            <div class="progress-step" data-step="0"><span class="step-num">1</span><span class="step-label">Lesions</span></div>
+            <div class="progress-step" data-step="1"><span class="step-num">2</span><span class="step-label">Infiltration</span></div>
+            <div class="progress-step" data-step="2"><span class="step-num">3</span><span class="step-label">Neg. Findings</span></div>
+            <div class="progress-step" data-step="3"><span class="step-num">4</span><span class="step-label">Organs</span></div>
+            <div class="progress-step" data-step="4"><span class="step-num">5</span><span class="step-label">Incidentals</span></div>
+            <div class="progress-step" data-step="5"><span class="step-num">6</span><span class="step-label">Conclusions</span></div>
+          </div>
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar-fill"></div></div>
+        </div>
+
+        <!-- Step status -->
+        <div class="review-status" id="review-status">
+          <div class="spinner spinner-sm"></div>
+          <span>Running agent&hellip;</span>
+        </div>
+
+        <!-- Image carousel -->
+        <div class="review-images" id="review-images">
+          <div class="image-thumbnails" id="image-thumbnails"></div>
+          <div class="image-viewer" id="image-viewer">
+            <img id="image-viewer-img" alt="CT slice" />
+            <div class="image-viewer-label" id="image-viewer-label"></div>
+            <div class="image-viewer-reason" id="image-viewer-reason"></div>
+          </div>
+          <div class="image-legend" id="image-legend"></div>
+        </div>
+
+        <!-- Agent proposal (editable) -->
+        <div class="review-proposal" id="review-proposal"></div>
+
+        <!-- Relancer l'agent avec une remarque -->
+        <div class="review-refine" id="review-refine" style="display:none">
+          <label class="form-label">Relancer l'agent avec une remarque (optionnel)</label>
+          <div class="refine-row">
+            <input type="text" id="refine-remark" class="form-input" placeholder="Ex. vérifier l'infiltration du vaisseau…" maxlength="500" />
+            <button type="button" id="btn-refine" class="btn btn-secondary">Relancer l'agent</button>
+          </div>
+          <div id="refine-error" class="refine-error"></div>
+          <div id="refine-status" class="refine-status"></div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="review-actions" id="review-actions" style="display:none">
+          <button id="btn-validate" class="btn btn-primary" style="width:auto;padding:.6rem 2rem">
+            Validate &amp; Continue &#8594;
+          </button>
+        </div>
+      </div>
+
+      <!-- Report container (final) -->
       <div id="report-container" style="display:none">
 
-        <!-- Report header -->
         <div class="report-header" id="report-header"></div>
 
-        <!-- Sections -->
         <div class="report-sections">
 
           <section class="report-card" id="section-clinical-info">
@@ -94,7 +150,7 @@
 
           <section class="report-card" id="section-report-agent">
             <h3 class="card-title card-title--purple" data-toggle="report-agent-body">
-              <span class="card-icon">&#129302;</span> Findings &mdash; AI Agent
+              <span class="card-icon">&#129302;</span> Findings &mdash; AI Agent (validated)
               <span class="chevron">&#9660;</span>
             </h3>
             <div class="card-body" id="report-agent-body"></div>
@@ -110,7 +166,6 @@
 
         </div>
 
-        <!-- Action bar -->
         <div class="action-bar">
           <button id="btn-copy" class="btn btn-secondary">&#128203; Copy as text</button>
           <button id="btn-export" class="btn btn-secondary">&#128229; Export JSON</button>

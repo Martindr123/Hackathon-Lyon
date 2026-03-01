@@ -14,7 +14,6 @@ from src.domain.report_determinist import ReportDeterminist
 from src.domain.report_agent import ReportAgent
 from src.services.llm_service import LLMService
 from src.services.llm_prompt_service import LLMPrompt, PromptMessage
-from src.agents.common import ExamContext
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +90,12 @@ def _format_report_summary(
 
     infilt = agt.infiltration
     if infilt.present_indicators:
-        parts.append(f"\n**Infiltration** ({infilt.level.value}): {infilt.summary or 'N/A'}")
-        parts.append(f"  Score: {infilt.final_score:.2f} | Indicators: {', '.join(infilt.present_indicators)}")
+        parts.append(
+            f"\n**Infiltration** ({infilt.level.value}): {infilt.summary or 'N/A'}"
+        )
+        parts.append(
+            f"  Score: {infilt.final_score:.2f} | Indicators: {', '.join(infilt.present_indicators)}"
+        )
 
     if agt.organ_assessments:
         parts.append("\n**Organ assessments**:")
@@ -125,6 +128,7 @@ def run_conclusions_agent(
     conclusions_det: Conclusions,
     previous_report: str | None = None,
     llm: LLMService | None = None,
+    radiologist_remark: str | None = None,
 ) -> Conclusions:
     """Generate key_findings and recommendation, then merge with deterministic conclusions.
 
@@ -132,7 +136,11 @@ def run_conclusions_agent(
     """
     llm = llm or LLMService()
 
-    user_text = _format_report_summary(report_det, report_agt, conclusions_det, previous_report)
+    user_text = _format_report_summary(
+        report_det, report_agt, conclusions_det, previous_report
+    )
+    if radiologist_remark:
+        user_text = user_text.rstrip() + "\n\nRemarque du radiologue à prendre en compte : " + radiologist_remark
 
     prompt = LLMPrompt()
     prompt.messages.append(PromptMessage(role="system", text=SYSTEM_PROMPT))

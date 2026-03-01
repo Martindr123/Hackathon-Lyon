@@ -19,6 +19,24 @@ Your task is to provide, for each lesion, its **anatomical location**, a \
 **characterization** of its appearance, and a **confidence** score (0.0-1.0) \
 reflecting how certain you are about your assessment.
 
+IMPORTANT MEASUREMENT CONTEXT:
+- You will be given the deterministic measurements for each lesion computed \
+  from the segmentation mask (longest diameter and short-axis diameter).
+- For lymph nodes, the clinically relevant measurement is the SHORT AXIS \
+  (RECIST convention). A lymph node with short axis ≥ 10 mm is considered \
+  pathological.
+- For solid lesions / nodules, the clinically relevant measurement is the \
+  LONGEST DIAMETER.
+- In your characterization, specify which measurement is clinically relevant \
+  and interpret it accordingly.
+
+PREVIOUS EXAM COMPARISON:
+- If a previous report is provided, compare each lesion with its counterpart \
+  based on anatomical location (spatial matching), NOT segment number.
+- State whether the lesion has increased, decreased, or remained stable \
+  compared to the previous exam, and reference the previous measurement if \
+  available in the prior report.
+
 Confidence guidelines:
 - 0.9-1.0: Very clear, unambiguous finding
 - 0.7-0.89: Confident but minor uncertainty
@@ -31,7 +49,7 @@ Respond ONLY with a JSON object:
   "lesions": [
     {
       "location": "<precise anatomical location>",
-      "characterization": "<appearance description>",
+      "characterization": "<appearance description including which measurement applies and comparison with prior>",
       "confidence": 0.85
     }
   ]
@@ -45,15 +63,31 @@ def _build_user_text(ctx: ExamContext) -> str:
     parts = [
         f"This patient has **{ctx.n_lesions}** annotated lesion(s) on the current exam.",
         "Red overlays on the images indicate the segmented lesion regions.",
+        "",
+        "### Segmentation measurements (computed from masks):",
     ]
+    for m in ctx.seg_measurements:
+        parts.append(
+            f"- Segment {m.segment_number}: longest diameter = {m.longest_diameter_mm} mm, "
+            f"short axis = {m.short_axis_mm} mm, volume = {m.volume_ml:.2f} mL, "
+            f"best slice = image {m.best_slice_index}"
+        )
+
     if ctx.previous_report_text:
         parts.append("")
         parts.append("### Previous report (REPORT section) for context:")
         parts.append(ctx.previous_report_text)
+        parts.append("")
+        parts.append(
+            "Use anatomical location to match each current lesion to its "
+            "counterpart in the previous report. Report changes in size."
+        )
     parts.append("")
     parts.append(
         f"Identify the anatomical location and characterization for each of "
-        f"the {ctx.n_lesions} lesion(s). Include a confidence score for each. Return the JSON."
+        f"the {ctx.n_lesions} lesion(s). For each lesion, specify whether the "
+        f"short axis or longest diameter is the clinically relevant measurement. "
+        f"Include a confidence score for each. Return the JSON."
     )
     return "\n".join(parts)
 

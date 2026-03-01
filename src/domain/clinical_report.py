@@ -35,7 +35,9 @@ class ClinicalReport(BaseModel):
             technique_line += f" ({tech.contrast_agent})"
         technique_line += "."
         if tech.comparison_study_date:
-            technique_line += f" Compares to previous CT available on {tech.comparison_study_date}."
+            technique_line += (
+                f" Compares to previous CT available on {tech.comparison_study_date}."
+            )
         parts.append(technique_line)
 
         det = self.report.report_determinist
@@ -51,6 +53,8 @@ class ClinicalReport(BaseModel):
             location = a.location if a else f"Lesion {i + 1}"
             dims = "x".join(f"{v:.0f}" for v in d.dimensions_mm) if d else "?"
             line = f"- {location}: {dims}mm"
+            if d and d.short_axis_mm is not None:
+                line += f" (short axis {d.short_axis_mm:.0f}mm)"
 
             if d and d.previous_dimensions_mm:
                 prev = "x".join(f"{v:.0f}" for v in d.previous_dimensions_mm)

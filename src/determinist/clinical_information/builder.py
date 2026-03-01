@@ -10,7 +10,7 @@ from src.repositories.data_repo import DataRepo
 
 
 _CLINICAL_INFO_PATTERN = re.compile(
-    r"CLINICAL INFORMATION\.\s*(.+?)(?:\s*(?:STUDY TECHNIQUE|REPORT|CONCLUSIONS)\.|$)",
+    r"(?:CLINICAL INFORMATION\.|Reason for Study:)\s*(.+?)(?:\s*(?:STUDY TECHNIQUE|REPORT|CONCLUSIONS)[.:]|$)",
     re.DOTALL | re.IGNORECASE,
 )
 
@@ -37,7 +37,9 @@ def _parse_clinical_info_text(raw_report: str) -> tuple[str, str]:
     return diagnosis, context
 
 
-def _read_dicom_tags(data_repo: DataRepo, patient_id: str, accession_number: int) -> dict[str, str]:
+def _read_dicom_tags(
+    data_repo: DataRepo, patient_id: str, accession_number: int
+) -> dict[str, str]:
     """Read demographic and clinical-context DICOM tags from the current exam."""
     study = data_repo.get_study(patient_id, accession_number)
     if study is None:
@@ -50,8 +52,13 @@ def _read_dicom_tags(data_repo: DataRepo, patient_id: str, accession_number: int
         ds = pydicom.dcmread(str(series.dicom_files[0]), stop_before_pixels=True)
         info: dict[str, str] = {}
 
-        for tag_name in ("PatientSex", "PatientAge", "BodyPartExamined",
-                         "StudyDescription", "PatientComments"):
+        for tag_name in (
+            "PatientSex",
+            "PatientAge",
+            "BodyPartExamined",
+            "StudyDescription",
+            "PatientComments",
+        ):
             if hasattr(ds, tag_name):
                 val = getattr(ds, tag_name)
                 if val:
@@ -117,9 +124,17 @@ def build_clinical_information(
     for past_exam in reversed(history):
         if past_exam.accession_number == accession_number:
             continue
-        if current_date and past_exam.study_date and past_exam.study_date >= current_date:
+        if (
+            current_date
+            and past_exam.study_date
+            and past_exam.study_date >= current_date
+        ):
             continue
-        if past_exam.clinical_info and not past_exam.clinical_info.startswith("NO rep"):
+        if (
+            past_exam.clinical_info
+            and "no reporting data" not in past_exam.clinical_info.lower()
+            and not past_exam.clinical_info.startswith("NO rep")
+        ):
             diagnosis, context = _parse_clinical_info_text(past_exam.clinical_info)
             break
 

@@ -1,16 +1,59 @@
+import re
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-EXCEL_FILENAME = "Liste examen UNBOXED finaliseģe v2 (avec mesures).xlsx"
+EXCEL_FILENAME = "clinical data.xlsx"
 
-COL_SERIE = "Série avec les masques de DICOM SEG"
-COL_LESION_SIZE = "lesion size in mm"
 COL_PATIENT_ID = "PatientID"
 COL_ACCESSION = "AccessionNumber"
 COL_CLINICAL = "Clinical information data (Pseudo reports)"
+
+_FMARKER_RE = re.compile(
+    r"[-–(]\s*(?:F|L)\s*(\d+)\s*[).]?"
+    r"[^.]*?"
+    r"(\d+(?:\.\d+)?)\s*(?:x\s*(\d+(?:\.\d+)?))?\s*mm",
+    re.IGNORECASE,
+)
+
+_DIMENSION_RE = re.compile(
+    r"(?:of|measuring|diameter)\s+"
+    r"(\d+(?:\.\d+)?)\s*(?:x\s*(\d+(?:\.\d+)?))?\s*mm",
+    re.IGNORECASE,
+)
+
+
+def _parse_lesion_sizes_from_report(report: str) -> list[float]:
+    """Extract target-lesion longest diameters from the clinical report text.
+
+    Looks for F-markers (F1, F2, …) and extracts the largest dimension
+    mentioned near each marker.  Falls back to an empty list if no
+    F-markers are found.
+    """
+    matches = _FMARKER_RE.findall(report)
+    if not matches:
+        return []
+
+    by_index: dict[int, float] = {}
+    for idx_str, dim1, dim2 in matches:
+        idx = int(idx_str)
+        d1 = float(dim1)
+        d2 = float(dim2) if dim2 else 0.0
+        longest = max(d1, d2)
+        if idx not in by_index or longest > by_index[idx]:
+            by_index[idx] = longest
+
+    return [by_index[k] for k in sorted(by_index)]
+
+
+def _find_serie_column(df: pd.DataFrame) -> str:
+    """Find the Serie column, accounting for trailing whitespace."""
+    for col in df.columns:
+        if col.strip().startswith("Série avec les masques"):
+            return col
+    raise KeyError("Cannot find 'Série avec les masques de DICOM SEG' column")
 
 
 @dataclass
@@ -27,40 +70,34 @@ class Examen:
         return max(self.lesion_sizes_mm) if self.lesion_sizes_mm else None
 
     @property
+    def lesion_count(self) -> int:
+        return len(self.lesion_sizes_mm)
+
+    @property
     def patient_data_dir(self) -> Path:
         return DATA_DIR / self.patient_id
-
-
-def _parse_lesion_sizes(raw: str) -> list[float]:
-    """Parse the lesion size field which can contain multiple values separated by newlines."""
-    sizes: list[float] = []
-    for part in raw.strip().split("\n"):
-        part = part.strip()
-        if part:
-            try:
-                sizes.append(float(part))
-            except ValueError:
-                continue
-    return sizes
 
 
 class ListeExamenRepo:
     def __init__(self, filepath: Path | None = None):
         self._filepath = filepath or (DATA_DIR / EXCEL_FILENAME)
         self._df: pd.DataFrame | None = None
+        self._col_serie: str | None = None
 
     def _load(self) -> pd.DataFrame:
         if self._df is None:
             self._df = pd.read_excel(self._filepath)
+            self._col_serie = _find_serie_column(self._df)
         return self._df
 
     def _row_to_examen(self, row: pd.Series) -> Examen:
+        clinical = str(row[COL_CLINICAL])
         return Examen(
-            serie=str(row[COL_SERIE]),
-            lesion_sizes_mm=_parse_lesion_sizes(str(row[COL_LESION_SIZE])),
+            serie=str(row[self._col_serie]),
+            lesion_sizes_mm=_parse_lesion_sizes_from_report(clinical),
             patient_id=str(row[COL_PATIENT_ID]),
             accession_number=int(row[COL_ACCESSION]),
-            clinical_info=str(row[COL_CLINICAL]),
+            clinical_info=clinical,
         )
 
     # ── Queries ──────────────────────────────────────────────
@@ -80,6 +117,7 @@ class ListeExamenRepo:
         subset = df[mask]
         if subset.empty:
             return None
+        self._load()  # ensure _col_serie is set
         return self._row_to_examen(subset.iloc[0])
 
     def get_patient_ids(self) -> list[str]:
@@ -96,7 +134,6 @@ class ListeExamenRepo:
         fallback sort key is ``accession_number`` (not guaranteed to be
         chronological).
         """
-        from src.repositories.data_repo import DataRepo  # noqa: F811 – lazy to avoid circular
 
         exams = self.get_by_patient_id(patient_id)
 

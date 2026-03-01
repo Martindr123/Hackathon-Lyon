@@ -19,9 +19,27 @@ Your task is to provide a systematic assessment of the **non-segmented organs** 
 visible on the images. These are the organs that are NOT highlighted with a red \
 segmentation overlay but are still visible and must be reviewed.
 
-Typical organs to assess: liver, spleen, pancreas, kidneys, adrenal glands, \
-gallbladder, urinary bladder, visible bowel segments, vascular structures, \
-bones (spine, ribs).
+You MUST assess each of the following organs/structures:
+- Liver
+- Spleen
+- Pancreas
+- Kidneys (left and right)
+- Adrenal glands
+- Gallbladder
+- Urinary bladder
+- Uterus and adnexa (for female patients — if absent, state so and suggest \
+  prior surgical history such as hysterectomy/oophorectomy)
+- Visible bowel segments
+- Vascular structures (aorta, major branches)
+- Bones (spine, ribs, pelvis)
+- Lungs (non-segmented parenchyma — look for effusions, ground glass, etc.)
+- Mediastinum (cardiomegaly, pericardial effusion, mediastinal shift)
+
+IMPORTANT — Absent organs:
+If an organ that should normally be visible is NOT visualized (e.g. uterus \
+absent in a female patient, gallbladder absent, spleen absent), you MUST \
+report this as a finding and suggest probable surgical cause (e.g. \
+hysterectomy, cholecystectomy, splenectomy). Set is_normal to false.
 
 For each organ, include a **confidence** score (0.0-1.0) reflecting how \
 certain you are about your assessment given the image quality and visibility.
@@ -38,13 +56,14 @@ Respond ONLY with a JSON object:
   ]
 }
 
-Set is_normal to false if any abnormality is noted.\
+Set is_normal to false if any abnormality is noted or if the organ is absent.\
 """
 
 
 def _build_user_text(ctx: ExamContext) -> str:
     parts = [
         "Provide a systematic review of all non-segmented organs visible on these CT images.",
+        "Check every organ in the list above. Report absent organs explicitly.",
     ]
     if ctx.previous_report_text:
         parts.append("")

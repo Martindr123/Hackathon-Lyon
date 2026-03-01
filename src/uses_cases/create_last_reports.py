@@ -37,11 +37,13 @@ def create_last_reports(
             reports[patient_id] = report
         except Exception:
             logger.exception("Failed to generate report for patient %s", patient_id)
-            reports[patient_id] = f"ERROR: report generation failed"
+            reports[patient_id] = "ERROR: report generation failed"
 
-    logger.info("Done. %d/%d reports generated successfully.",
-                sum(1 for r in reports.values() if not r.startswith("ERROR")),
-                len(reports))
+    logger.info(
+        "Done. %d/%d reports generated successfully.",
+        sum(1 for r in reports.values() if not r.startswith("ERROR")),
+        len(reports),
+    )
     return reports
 
 

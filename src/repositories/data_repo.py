@@ -88,9 +88,7 @@ class DataRepo:
 
     def get_patient_ids(self) -> list[str]:
         return [
-            d.name.split(" ")[0]
-            for d in sorted(self._data_dir.iterdir())
-            if d.is_dir()
+            d.name.split(" ")[0] for d in sorted(self._data_dir.iterdir()) if d.is_dir()
         ]
 
     # ── Study level ──────────────────────────────────────────
@@ -99,14 +97,14 @@ class DataRepo:
         dicom_files = sorted(
             f for f in series_dir.iterdir() if f.is_file() and f.suffix == ".dcm"
         )
-        return SeriesInfo(name=series_dir.name, path=series_dir, dicom_files=dicom_files)
+        return SeriesInfo(
+            name=series_dir.name, path=series_dir, dicom_files=dicom_files
+        )
 
     def _build_study(self, study_dir: Path) -> StudyInfo:
         accession, description = _parse_study_folder_name(study_dir.name)
         series = [
-            self._build_series(d)
-            for d in sorted(study_dir.iterdir())
-            if d.is_dir()
+            self._build_series(d) for d in sorted(study_dir.iterdir()) if d.is_dir()
         ]
         return StudyInfo(
             accession_number=accession,
@@ -120,9 +118,7 @@ class DataRepo:
         if patient_dir is None:
             return []
         return [
-            self._build_study(d)
-            for d in sorted(patient_dir.iterdir())
-            if d.is_dir()
+            self._build_study(d) for d in sorted(patient_dir.iterdir()) if d.is_dir()
         ]
 
     def get_study(self, patient_id: str, accession_number: int) -> StudyInfo | None:
@@ -152,7 +148,9 @@ class DataRepo:
             for study in self.get_studies(patient_id)
         }
 
-    def get_segmentation_file(self, patient_id: str, accession_number: int) -> Path | None:
+    def get_segmentation_file(
+        self, patient_id: str, accession_number: int
+    ) -> Path | None:
         study = self.get_study(patient_id, accession_number)
         if study is None:
             return None

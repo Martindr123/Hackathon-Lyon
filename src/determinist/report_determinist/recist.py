@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 RECIST_PR_THRESHOLD = -30.0  # ≥ 30% decrease → Partial Response
-RECIST_PD_THRESHOLD = 20.0   # ≥ 20% increase → Progressive Disease
-RECIST_PD_ABS_MM = 5.0       # minimum absolute increase for PD
+RECIST_PD_THRESHOLD = 20.0  # ≥ 20% increase → Progressive Disease
+RECIST_PD_ABS_MM = 5.0  # minimum absolute increase for PD
 
 
 def compute_evolution(current_max: float, previous_max: float) -> str:

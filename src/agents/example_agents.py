@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class ClinicalInfoAgent(JsonAgent[ClinicalInformation]):
     """
     Agent that extracts clinical information from medical images.
-    
+
     Usage:
         agent = ClinicalInfoAgent()
         clinical_info = await agent.process(
@@ -59,7 +59,9 @@ class ClinicalInfoAgent(JsonAgent[ClinicalInformation]):
             role="user",
             text=user_text,
             image_paths=[Path(p) if isinstance(p, str) else p for p in image_paths],
-            seg_path=Path(seg_path) if seg_path and isinstance(seg_path, str) else seg_path,
+            seg_path=Path(seg_path)
+            if seg_path and isinstance(seg_path, str)
+            else seg_path,
         )
 
         return LLMPrompt(messages=[system_msg, user_msg])
@@ -68,10 +70,10 @@ class ClinicalInfoAgent(JsonAgent[ClinicalInformation]):
 class StudyTechniqueAgent(JsonAgent):
     """
     Agent that extracts study technique information from DICOM metadata.
-    
+
     Usage:
         from src.domain.study_technique import StudyTechnique
-        
+
         agent = StudyTechniqueAgent()
         technique = await agent.process(
             output_model=StudyTechnique,

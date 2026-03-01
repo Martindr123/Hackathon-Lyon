@@ -7,7 +7,9 @@ from src.repositories.liste_examen_repo import ListeExamenRepo
 from src.repositories.data_repo import DataRepo
 
 
-def _read_dicom_technique(data_repo: DataRepo, patient_id: str, accession_number: int) -> dict:
+def _read_dicom_technique(
+    data_repo: DataRepo, patient_id: str, accession_number: int
+) -> dict:
     """Extract imaging technique metadata from the first CT DICOM file."""
     study = data_repo.get_study(patient_id, accession_number)
     if study is None:
@@ -78,7 +80,9 @@ def _find_previous_exam(
     return previous_accession
 
 
-def _read_study_date(data_repo: DataRepo, patient_id: str, accession_number: int) -> str | None:
+def _read_study_date(
+    data_repo: DataRepo, patient_id: str, accession_number: int
+) -> str | None:
     """Read the StudyDate from the DICOM metadata of a study."""
     return data_repo.get_study_date(patient_id, accession_number)
 
@@ -102,7 +106,9 @@ def build_study_technique(
 
     meta = _read_dicom_technique(data_repo, patient_id, accession_number)
 
-    prev_accession = _find_previous_exam(examen_repo, patient_id, accession_number, data_repo)
+    prev_accession = _find_previous_exam(
+        examen_repo, patient_id, accession_number, data_repo
+    )
 
     prev_date: str | None = None
     if prev_accession is not None:

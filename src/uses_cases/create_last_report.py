@@ -33,10 +33,28 @@ from src.determinist.study_technique.builder import build_study_technique
 from src.determinist.report_determinist.builder import build_report_determinist
 from src.determinist.conclusions.builder import build_conclusions_determinist
 
-from src.agents.common import build_exam_context
+from src.agents.common import build_exam_context, context_with_images
+from src.agents.slice_selection import (
+    get_image_groups_for_task,
+    TASK_LESIONS,
+    TASK_INFILTRATION,
+    TASK_NEGATIVE_FINDINGS,
+    TASK_ORGAN_ASSESSMENTS,
+    TASK_INCIDENTAL_FINDINGS,
+)
+from src.agents.aggregation import (
+    aggregate_lesions,
+    aggregate_infiltration,
+    aggregate_negative_findings,
+    aggregate_organ_assessments,
+    aggregate_incidental_findings,
+)
 from src.agents.lesions_agent import run_lesions_agent
 from src.agents.infiltration_agent import run_infiltration_agent
-from src.agents.negative_findings_agent import run_negative_findings_agent
+from src.agents.negative_findings_agent import (
+    run_negative_findings_agent,
+    NegativeFindingsResult,
+)
 from src.agents.organ_assessments_agent import run_organ_assessments_agent
 from src.agents.incidental_findings_agent import run_incidental_findings_agent
 from src.agents.conclusions_agent import run_conclusions_agent
@@ -63,45 +81,145 @@ def create_last_report(
     # ── 1. Deterministic ─────────────────────────────────────
     logger.info("[determinist] ClinicalInformation …")
     clinical_info = build_clinical_information(
-        patient_id, accession_number, examen_repo, data_repo,
+        patient_id,
+        accession_number,
+        examen_repo,
+        data_repo,
     )
 
     logger.info("[determinist] StudyTechnique …")
     study_technique = build_study_technique(
-        patient_id, accession_number, examen_repo, data_repo,
+        patient_id,
+        accession_number,
+        examen_repo,
+        data_repo,
     )
 
     logger.info("[determinist] ReportDeterminist …")
     report_det = build_report_determinist(
-        patient_id, accession_number, examen_repo, data_repo,
+        patient_id,
+        accession_number,
+        examen_repo,
+        data_repo,
     )
 
     logger.info("[determinist] Conclusions (RECIST + sums) …")
     conclusions_det = build_conclusions_determinist(
-        patient_id, accession_number, examen_repo, data_repo,
+        patient_id,
+        accession_number,
+        examen_repo,
+        data_repo,
     )
 
-    # ── 2. Shared image context (prepared once, reused by all agents) ──
-    logger.info("[agents] Preparing exam context (%d slices max) …", max_slices)
+    # ── 2. Base exam context (meta + series; image groups chosen per task) ──
+    logger.info("[agents] Preparing exam context …")
     ctx = build_exam_context(
-        patient_id, accession_number, max_slices, examen_repo, data_repo,
+        patient_id,
+        accession_number,
+        max_slices,
+        examen_repo,
+        data_repo,
     )
 
-    # ── 3. LLM agents ────────────────────────────────────────
+    # ── 3. LLM agents (per-task slice selection; multi-run + aggregate when needed) ──
+    def run_lesions_multi():
+        groups, indices = get_image_groups_for_task(
+            TASK_LESIONS, ctx.series_files, ctx.seg_path, ctx.seg_measurements
+        )
+        sub = [
+            run_lesions_agent(
+                patient_id, accession_number, llm=llm, ctx=context_with_images(ctx, g)
+            )
+            for g in groups
+        ]
+        return (
+            aggregate_lesions(sub, ctx.seg_measurements, indices)
+            if len(sub) > 1
+            else (sub[0] if sub else [])
+        )
+
+    def run_infiltration_multi():
+        groups, _ = get_image_groups_for_task(
+            TASK_INFILTRATION, ctx.series_files, ctx.seg_path, ctx.seg_measurements
+        )
+        sub = [
+            run_infiltration_agent(
+                patient_id, accession_number, llm=llm, ctx=context_with_images(ctx, g)
+            )
+            for g in groups
+        ]
+        return (
+            aggregate_infiltration(sub) if len(sub) > 1 else (sub[0] if sub else None)
+        )
+
+    def run_negative_multi():
+        groups, _ = get_image_groups_for_task(
+            TASK_NEGATIVE_FINDINGS, ctx.series_files, ctx.seg_path, ctx.seg_measurements
+        )
+        sub = []
+        for g in groups:
+            r = run_negative_findings_agent(
+                patient_id, accession_number, llm=llm, ctx=context_with_images(ctx, g)
+            )
+            sub.append((r.findings, r.confidence))
+        if len(sub) == 1:
+            return sub[0][0], sub[0][1]
+        return aggregate_negative_findings(sub)
+
+    def run_organs_multi():
+        groups, _ = get_image_groups_for_task(
+            TASK_ORGAN_ASSESSMENTS, ctx.series_files, ctx.seg_path, ctx.seg_measurements
+        )
+        sub = [
+            run_organ_assessments_agent(
+                patient_id, accession_number, llm=llm, ctx=context_with_images(ctx, g)
+            )
+            for g in groups
+        ]
+        return (
+            aggregate_organ_assessments(sub)
+            if len(sub) > 1
+            else (sub[0] if sub else [])
+        )
+
+    def run_incidentals_multi():
+        groups, _ = get_image_groups_for_task(
+            TASK_INCIDENTAL_FINDINGS,
+            ctx.series_files,
+            ctx.seg_path,
+            ctx.seg_measurements,
+        )
+        sub = [
+            run_incidental_findings_agent(
+                patient_id, accession_number, llm=llm, ctx=context_with_images(ctx, g)
+            )
+            for g in groups
+        ]
+        return (
+            aggregate_incidental_findings(sub)
+            if len(sub) > 1
+            else (sub[0] if sub else [])
+        )
+
     logger.info("[agents] Lesions …")
-    lesions = run_lesions_agent(patient_id, accession_number, llm=llm, ctx=ctx)
+    lesions = run_lesions_multi()
 
     logger.info("[agents] Infiltration …")
-    infiltration = run_infiltration_agent(patient_id, accession_number, llm=llm, ctx=ctx)
+    infiltration = run_infiltration_multi()
+    if infiltration is None:
+        from src.domain.infiltration_assessment import InfiltrationAssessment
+
+        infiltration = InfiltrationAssessment()
 
     logger.info("[agents] Negative findings …")
-    neg_result = run_negative_findings_agent(patient_id, accession_number, llm=llm, ctx=ctx)
+    neg_findings, neg_conf = run_negative_multi()
+    neg_result = NegativeFindingsResult(findings=neg_findings, confidence=neg_conf)
 
     logger.info("[agents] Organ assessments …")
-    organ_assessments = run_organ_assessments_agent(patient_id, accession_number, llm=llm, ctx=ctx)
+    organ_assessments = run_organs_multi()
 
     logger.info("[agents] Incidental findings …")
-    incidental_findings = run_incidental_findings_agent(patient_id, accession_number, llm=llm, ctx=ctx)
+    incidental_findings = run_incidentals_multi()
 
     report_agt = ReportAgent(
         lesions=lesions,
@@ -115,7 +233,11 @@ def create_last_report(
     # ── 4. Conclusions agent (text-only, uses full report as context) ──
     logger.info("[agents] Conclusions (key findings + recommendation) …")
     conclusions = run_conclusions_agent(
-        report_det, report_agt, conclusions_det, ctx.previous_report_text, llm=llm,
+        report_det,
+        report_agt,
+        conclusions_det,
+        ctx.previous_report_text,
+        llm=llm,
     )
 
     # ── 5. Assemble ──────────────────────────────────────────

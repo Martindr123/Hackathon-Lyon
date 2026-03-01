@@ -18,12 +18,37 @@ examination with lesion segmentations overlaid in red.
 Your task is to list **confirmed negative findings**: abnormalities that you \
 have specifically looked for and can confirm are absent.
 
+You MUST systematically check the following structures and report each one \
+that is normal:
+
+**Pleura & pericardium**:
+- Pleural effusion (left, right, bilateral)
+- Pericardial effusion
+
+**Lymph nodes** (pathological = short axis ≥ 10 mm):
+- Supraclavicular lymphadenopathy
+- Axillary lymphadenopathy
+- Infradiaphragmatic / retroperitoneal lymphadenopathy
+
+**Fluids**:
+- Free intra-abdominal fluid (ascites)
+
+**Metastatic disease**:
+- Bone lesions suspicious for metastasis
+- Additional pulmonary nodules beyond known/tracked lesions
+- Liver metastases
+
+**Other**:
+- Bowel obstruction or perforation
+- Pneumothorax
+- Deep vein thrombosis or pulmonary embolism (if visible)
+
 Also provide a global **confidence** score (0.0-1.0) reflecting how certain \
 you are about your negative findings given the image quality and coverage.
 
-Examples: "No pleural effusion", "No pericardial effusion", \
-"No evidence of other nodules", "No bone lesions", \
-"No pathological lymphadenopathy".
+IMPORTANT: Only list a finding as negative if you have genuinely verified it \
+on the images. If image coverage or quality prevents you from assessing a \
+structure, do NOT claim it is negative — omit it instead.
 
 Respond ONLY with a JSON object:
 {
@@ -42,12 +67,19 @@ class NegativeFindingsResult(NamedTuple):
 
 def _build_user_text(ctx: ExamContext) -> str:
     parts = [
-        "Analyze the CT images and list all relevant confirmed negative findings.",
+        "Analyze the CT images and systematically check each structure listed above.",
+        "List all relevant confirmed negative findings.",
     ]
     if ctx.previous_report_text:
         parts.append("")
         parts.append("### Previous report (REPORT section) for context:")
         parts.append(ctx.previous_report_text)
+        parts.append("")
+        parts.append(
+            "Pay special attention to any finding mentioned in the previous report "
+            "that may have changed — e.g. if the previous report noted no pleural "
+            "effusion, verify whether that is still the case."
+        )
     parts.append("")
     parts.append("Return the JSON with your findings and confidence.")
     return "\n".join(parts)

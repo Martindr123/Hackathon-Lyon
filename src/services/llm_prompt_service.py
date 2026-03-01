@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from dataclasses import dataclass, field
 
-import numpy as np
 import SimpleITK as sitk
 import pydicom
 
@@ -119,10 +118,8 @@ def _format_exam_history_block(examen: Examen, study: StudyInfo | None) -> str:
         f"--- Exam (AccessionNumber: {examen.accession_number}) ---",
         f"Study: {study.description if study else 'N/A'}",
         f"Series with segmentation masks: {examen.serie}",
-        f"Lesion sizes (mm): {', '.join(f'{s:.1f}' for s in examen.lesion_sizes_mm)}",
+        f"Target lesion sizes (mm): {', '.join(f'{s:.1f}' for s in examen.lesion_sizes_mm) or 'N/A'}",
     ]
-    if examen.max_lesion_size is not None:
-        lines.append(f"Max lesion size: {examen.max_lesion_size:.1f} mm")
 
     lines.append("")
     lines.append("Clinical report:")
@@ -166,7 +163,9 @@ class LLMPromptService:
                 raise ValueError(
                     f"Accession {current_accession_number} not found for patient {patient_id}"
                 )
-            previous_exams = [e for e in history if e.accession_number != current_accession_number]
+            previous_exams = [
+                e for e in history if e.accession_number != current_accession_number
+            ]
         else:
             current_exam = history[-1]
             previous_exams = history[:-1]
@@ -194,13 +193,23 @@ class LLMPromptService:
             )
 
         # 3. Current exam: metadata + overlay images
-        current_study = self._data_repo.get_study(patient_id, current_exam.accession_number)
+        current_study = self._data_repo.get_study(
+            patient_id, current_exam.accession_number
+        )
 
-        ct_series = self._match_series(current_study, current_exam.serie) if current_study else None
+        ct_series = (
+            self._match_series(current_study, current_exam.serie)
+            if current_study
+            else None
+        )
         all_series_files = ct_series.dicom_files if ct_series else []
 
         seg_path = None
-        if current_study and current_study.segmentation and current_study.segmentation.dicom_files:
+        if (
+            current_study
+            and current_study.segmentation
+            and current_study.segmentation.dicom_files
+        ):
             seg_path = current_study.segmentation.dicom_files[0]
 
         sampled_files = _subsample(all_series_files, max_slices_per_exam, seg_path)
@@ -210,25 +219,39 @@ class LLMPromptService:
         if sampled_files:
             ct_metadata = _extract_ct_metadata(sampled_files[0])
 
+        # Compute current lesion diameters from SEG masks (not from the report)
+        from src.determinist.report_determinist.seg_analyzer import (
+            analyze_seg as _analyze,
+        )
+
+        seg_diameters: list[float] = []
+        if seg_path:
+            try:
+                seg_diameters = [s.longest_diameter_mm for s in _analyze(seg_path)]
+            except Exception:
+                pass
+
         current_text_parts = [
             "## Current examination to report on\n",
             f"AccessionNumber: {current_exam.accession_number}",
             f"Study: {current_study.description if current_study else 'N/A'}",
             f"Series with segmentation masks: {current_exam.serie}",
-            f"Lesion sizes (mm): {', '.join(f'{s:.1f}' for s in current_exam.lesion_sizes_mm)}",
+            f"Target lesion diameters from segmentation (mm): {', '.join(f'{d:.1f}' for d in seg_diameters) or 'N/A'}",
         ]
         if ct_metadata:
             current_text_parts.append("")
             current_text_parts.append(_format_metadata_block(ct_metadata))
 
-        current_text_parts.extend([
-            "",
-            "The following CT images have the radiologist's segmentation overlaid "
-            "in red where lesions were annotated.",
-            "",
-            "Please generate the clinical report for this examination, "
-            "comparing with the previous exams provided above.",
-        ])
+        current_text_parts.extend(
+            [
+                "",
+                "The following CT images have the radiologist's segmentation overlaid "
+                "in red where lesions were annotated.",
+                "",
+                "Please generate the clinical report for this examination, "
+                "comparing with the previous exams provided above.",
+            ]
+        )
 
         prompt.messages.append(
             PromptMessage(
@@ -281,7 +304,9 @@ def _subsample(
         try:
             seg_img = sitk.ReadImage(str(seg_path))
             seg_arr = sitk.GetArrayFromImage(seg_img)
-            seg_indices = {i for i in range(min(seg_arr.shape[0], n)) if seg_arr[i].any()}
+            seg_indices = {
+                i for i in range(min(seg_arr.shape[0], n)) if seg_arr[i].any()
+            }
         except Exception:
             pass
 

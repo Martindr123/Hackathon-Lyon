@@ -124,11 +124,11 @@ def _build_user_text(ctx: ExamContext) -> str:
         )
     else:
         parts.append("")
-        parts.append(
-            "No previous report available. Set temporal fields to false."
-        )
+        parts.append("No previous report available. Set temporal fields to false.")
     parts.append("")
-    parts.append("Return the structured JSON with all indicators, mimic context, temporal data, confidence, and summary.")
+    parts.append(
+        "Return the structured JSON with all indicators, mimic context, temporal data, confidence, and summary."
+    )
     return "\n".join(parts)
 
 
@@ -153,8 +153,7 @@ def run_infiltration_agent(
 
     try:
         indicators = [
-            InfiltrationIndicator(**ind)
-            for ind in data.get("indicators", [])
+            InfiltrationIndicator(**ind) for ind in data.get("indicators", [])
         ]
         mimic_ctx = MimicContext(**data.get("mimic_context", {}))
         temporal = TemporalEvolution(**data.get("temporal", {}))

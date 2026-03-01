@@ -22,20 +22,20 @@ OutputType = TypeVar("OutputType", bound=BaseModel)
 class Agent(ABC, Generic[OutputType]):
     """
     Base Agent class that handles LLM communication and structured output parsing.
-    
+
     To create a specific agent:
     1. Subclass this agent
     2. Define the OutputType (Pydantic model) in your agent class
     3. Implement build_prompt() to create the LLMPrompt
     4. Implement parse_response() to extract the JSON from LLM response
     5. Optionally override validate_output() for custom validation
-    
+
     Example:
         class MyAgent(Agent[MyOutputModel]):
             def build_prompt(self, **kwargs) -> LLMPrompt:
                 # Build your prompt here
                 return prompt
-            
+
             def parse_response(self, response: str) -> dict:
                 # Extract JSON from response
                 return json_data
@@ -49,10 +49,10 @@ class Agent(ABC, Generic[OutputType]):
     def build_prompt(self, **kwargs) -> LLMPrompt:
         """
         Build the LLMPrompt to send to the LLM.
-        
+
         This should be implemented by subclasses to construct
         the prompt with system messages, user messages, and images.
-        
+
         Returns:
             LLMPrompt: Complete prompt with messages and images
         """
@@ -62,13 +62,13 @@ class Agent(ABC, Generic[OutputType]):
     def parse_response(self, response: str) -> dict:
         """
         Parse the LLM response and extract the JSON output.
-        
+
         This should be implemented by subclasses to extract
         structured data from the LLM's text response.
-        
+
         Args:
             response: Raw text response from the LLM
-            
+
         Returns:
             dict: Parsed JSON data ready for model validation
         """
@@ -77,16 +77,16 @@ class Agent(ABC, Generic[OutputType]):
     def validate_output(self, data: dict, output_model: type[OutputType]) -> OutputType:
         """
         Validate and convert parsed data to the output model.
-        
+
         Can be overridden by subclasses for custom validation logic.
-        
+
         Args:
             data: Parsed dictionary from parse_response()
             output_model: Target Pydantic model class
-            
+
         Returns:
             OutputType: Validated model instance
-            
+
         Raises:
             ValidationError: If data doesn't match the model
         """
@@ -99,11 +99,11 @@ class Agent(ABC, Generic[OutputType]):
     async def process(self, output_model: type[OutputType], **kwargs) -> OutputType:
         """
         Main entry point: build prompt, call LLM, parse and validate response.
-        
+
         Args:
             output_model: Target Pydantic model for the output
             **kwargs: Arguments passed to build_prompt()
-            
+
         Returns:
             OutputType: Validated model instance
         """
@@ -125,7 +125,7 @@ class Agent(ABC, Generic[OutputType]):
 class JsonAgent(Agent[OutputType]):
     """
     Specialized Agent for LLMs that output JSON in Markdown code blocks.
-    
+
     Automatically handles extraction of JSON from markdown blocks.
     Subclasses only need to implement build_prompt().
     """
@@ -133,7 +133,7 @@ class JsonAgent(Agent[OutputType]):
     def parse_response(self, response: str) -> dict:
         """
         Extract JSON from markdown code block.
-        
+
         Expected format:
             ```json
             { "key": "value" }
@@ -147,10 +147,12 @@ class JsonAgent(Agent[OutputType]):
                 json_str = response[start:end].strip()
                 logger.debug("Extracted JSON from markdown block")
                 return json.loads(json_str)
-        
+
         # Try to parse entire response as JSON
         try:
             return json.loads(response)
         except json.JSONDecodeError as e:
             logger.error("Failed to parse response as JSON: %s", e)
-            raise ValueError(f"Could not extract JSON from response: {response[:200]}...")
+            raise ValueError(
+                f"Could not extract JSON from response: {response[:200]}..."
+            )

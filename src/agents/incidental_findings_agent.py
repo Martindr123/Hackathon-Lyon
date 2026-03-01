@@ -75,7 +75,9 @@ def run_incidental_findings_agent(
 
     try:
         data = json.loads(raw)
-        return [IncidentalFinding(**item) for item in data.get("incidental_findings", [])]
+        return [
+            IncidentalFinding(**item) for item in data.get("incidental_findings", [])
+        ]
     except (json.JSONDecodeError, TypeError, KeyError):
         logger.error("Failed to parse incidental findings agent response: %s", raw)
         return []

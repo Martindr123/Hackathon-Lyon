@@ -11,6 +11,7 @@ import logging
 
 from src.domain.conclusions import Conclusions
 from src.repositories.liste_examen_repo import ListeExamenRepo, Examen
+from src.determinist.report_determinist.seg_analyzer import analyze_seg
 from src.determinist.report_determinist.recist import (
     compute_recist_conclusion,
     compute_change_percent,
@@ -52,7 +53,6 @@ def _find_previous_exam(
     accession_number: int,
     data_repo: "DataRepo | None" = None,
 ) -> Examen | None:
-    from src.repositories.data_repo import DataRepo  # noqa: F811
 
     history = examen_repo.get_patient_history(patient_id, data_repo)
     current_date = next(
@@ -86,15 +86,46 @@ def build_conclusions_determinist(
         logger.warning("No exam found for accession %s", accession_number)
         return Conclusions()
 
-    previous_exam = _find_previous_exam(examen_repo, patient_id, accession_number, data_repo)
+    previous_exam = _find_previous_exam(
+        examen_repo, patient_id, accession_number, data_repo
+    )
 
-    current_sizes = current_exam.lesion_sizes_mm
-    previous_sizes = previous_exam.lesion_sizes_mm if previous_exam else None
+    from src.repositories.data_repo import DataRepo as _DR
+
+    _dr = data_repo if isinstance(data_repo, _DR) else _DR()
+
+    # Current lesion sizes from SEG masks (not from the report being generated)
+    seg_path = _dr.get_segmentation_file(patient_id, accession_number)
+    if seg_path:
+        try:
+            current_sizes = [s.longest_diameter_mm for s in analyze_seg(seg_path)]
+        except Exception:
+            logger.warning("Failed to read SEG for conclusions", exc_info=True)
+            current_sizes = []
+    else:
+        current_sizes = []
+
+    # Previous sizes: prefer SEG, fall back to report text (report already exists)
+    if previous_exam:
+        prev_seg_path = _dr.get_segmentation_file(
+            patient_id, previous_exam.accession_number
+        )
+        if prev_seg_path:
+            try:
+                previous_sizes: list[float] | None = [
+                    s.longest_diameter_mm for s in analyze_seg(prev_seg_path)
+                ]
+            except Exception:
+                previous_sizes = previous_exam.lesion_sizes_mm or None
+        else:
+            previous_sizes = previous_exam.lesion_sizes_mm or None
+    else:
+        previous_sizes = None
 
     current_sum = sum(current_sizes) if current_sizes else None
     previous_sum = sum(previous_sizes) if previous_sizes else None
 
-    recist = compute_recist_conclusion(current_sizes, previous_sizes)
+    recist = compute_recist_conclusion(current_sizes, previous_sizes or [])
 
     justification: str | None = None
     if recist and current_sum is not None:

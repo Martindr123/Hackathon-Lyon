@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 
 class InfiltrationLevel(str, Enum):
@@ -43,15 +43,28 @@ class InfiltrationIndicator(BaseModel):
     name: str = Field(description="Indicator identifier (e.g. 'loss_of_fat_plane')")
     category: str = Field(description="morphological | vascular | thoracic | indirect")
     present: bool = Field(default=False)
-    certainty: LinguisticCertainty = Field(default=LinguisticCertainty.POSSIBLE)
-    description: str | None = Field(default=None, description="Free-text detail from LLM")
+    certainty: LinguisticCertainty | None = Field(
+        default=None,
+        description="Linguistic certainty when present=True; None when present=False",
+    )
+    description: str | None = Field(
+        default=None, description="Free-text detail from LLM"
+    )
+
+    @field_validator("certainty", mode="before")
+    @classmethod
+    def _empty_certainty_to_none(cls, v: object) -> LinguisticCertainty | None:
+        if v is None or v == "":
+            return None
+        return v
 
     @property
     def score(self) -> float:
         if not self.present:
             return 0.0
         weight = _INDICATOR_WEIGHTS.get(self.name, 1.0)
-        return weight * CERTAINTY_WEIGHTS[self.certainty]
+        cert = self.certainty or LinguisticCertainty.POSSIBLE
+        return weight * CERTAINTY_WEIGHTS[cert]
 
 
 _INDICATOR_WEIGHTS: dict[str, float] = {
@@ -123,8 +136,12 @@ class InfiltrationAssessment(BaseModel):
     indicators: list[InfiltrationIndicator] = Field(default_factory=list)
     mimic_context: MimicContext = Field(default_factory=MimicContext)
     temporal: TemporalEvolution = Field(default_factory=TemporalEvolution)
-    summary: str | None = Field(default=None, description="LLM free-text summary of infiltration findings")
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="LLM self-reported confidence")
+    summary: str | None = Field(
+        default=None, description="LLM free-text summary of infiltration findings"
+    )
+    confidence: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="LLM self-reported confidence"
+    )
 
     @computed_field
     @property

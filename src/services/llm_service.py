@@ -17,7 +17,7 @@ from src.services.llm_prompt_service import LLMPrompt, PromptMessage
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "mistral-small-latest"
+DEFAULT_MODEL = "mistral-large-latest"
 MAX_RETRIES = 3
 RETRY_DELAY_S = 2
 
@@ -83,9 +83,13 @@ def _build_content_parts(msg: PromptMessage) -> list[dict] | str:
     if msg.seg_path:
         try:
             seg_arr = _load_seg_volume(msg.seg_path)
-            logger.info("Loaded SEG volume %s, shape %s", msg.seg_path.name, seg_arr.shape)
+            logger.info(
+                "Loaded SEG volume %s, shape %s", msg.seg_path.name, seg_arr.shape
+            )
         except Exception:
-            logger.warning("Could not load SEG %s, falling back to plain CT", msg.seg_path)
+            logger.warning(
+                "Could not load SEG %s, falling back to plain CT", msg.seg_path
+            )
 
     for img_path in msg.image_paths:
         ct_slice = _read_ct_slice(img_path)
@@ -104,10 +108,12 @@ def _build_content_parts(msg: PromptMessage) -> list[dict] | str:
             img = ct_slice
 
         b64 = _to_base64_png(img)
-        parts.append({
-            "type": "image_url",
-            "image_url": f"data:image/png;base64,{b64}",
-        })
+        parts.append(
+            {
+                "type": "image_url",
+                "image_url": f"data:image/png;base64,{b64}",
+            }
+        )
 
     return parts
 
@@ -164,10 +170,12 @@ class LLMService:
     def _format_messages(self, prompt: LLMPrompt) -> list[dict]:
         formatted: list[dict] = []
         for msg in prompt.messages:
-            formatted.append({
-                "role": msg.role,
-                "content": _build_content_parts(msg),
-            })
+            formatted.append(
+                {
+                    "role": msg.role,
+                    "content": _build_content_parts(msg),
+                }
+            )
         return formatted
 
 

@@ -13,8 +13,21 @@ from pathlib import Path
 import SimpleITK as sitk
 
 from src.repositories.data_repo import DataRepo, SeriesInfo, StudyInfo
-from src.repositories.liste_examen_repo import ListeExamenRepo, Examen
+from src.repositories.liste_examen_repo import ListeExamenRepo
 from src.services.llm_prompt_service import PromptMessage, LLMPrompt
+from src.determinist.report_determinist.seg_analyzer import analyze_seg
+
+
+@dataclass
+class SegMeasurement:
+    """Per-segment measurements from the SEG DICOM."""
+
+    segment_number: int
+    longest_diameter_mm: float
+    short_axis_mm: float
+    volume_ml: float
+    best_slice_index: int  # 1-based for display
+    best_slice_global_index: int = 0  # 0-based in series for aggregation
 
 
 @dataclass
@@ -28,6 +41,8 @@ class ExamContext:
     series_files: list[Path] = field(default_factory=list)
     previous_report_text: str | None = None
     n_lesions: int = 0
+    seg_measurements: list[SegMeasurement] = field(default_factory=list)
+    radiologist_remark: str | None = None
 
 
 def _match_series(study: StudyInfo, serie_label: str) -> SeriesInfo | None:
@@ -57,7 +72,9 @@ def _subsample(
         try:
             seg_img = sitk.ReadImage(str(seg_path))
             seg_arr = sitk.GetArrayFromImage(seg_img)
-            seg_indices = {i for i in range(min(seg_arr.shape[0], n)) if seg_arr[i].any()}
+            seg_indices = {
+                i for i in range(min(seg_arr.shape[0], n)) if seg_arr[i].any()
+            }
         except Exception:
             pass
 
@@ -129,10 +146,32 @@ def build_exam_context(
             continue
         if current_date and past.study_date and past.study_date >= current_date:
             continue
-        if past.clinical_info and not past.clinical_info.startswith("NO rep"):
+        if (
+            past.clinical_info
+            and "no reporting data" not in past.clinical_info.lower()
+            and not past.clinical_info.startswith("NO rep")
+        ):
             section = _extract_report_section(past.clinical_info)
             previous_report = section or past.clinical_info.strip()
             break
+
+    # Measurements from SEG masks (not from the report we are generating)
+    seg_measurements: list[SegMeasurement] = []
+    if seg_path:
+        try:
+            for si in analyze_seg(seg_path):
+                seg_measurements.append(
+                    SegMeasurement(
+                        segment_number=si.segment_number,
+                        longest_diameter_mm=si.longest_diameter_mm,
+                        short_axis_mm=si.short_axis_mm,
+                        volume_ml=si.volume_ml,
+                        best_slice_index=si.best_slice_index,
+                        best_slice_global_index=si.best_slice_global_index,
+                    )
+                )
+        except Exception:
+            pass
 
     return ExamContext(
         patient_id=patient_id,
@@ -141,18 +180,54 @@ def build_exam_context(
         seg_path=seg_path,
         series_files=all_series_files,
         previous_report_text=previous_report,
-        n_lesions=len(current_exam.lesion_sizes_mm),
+        n_lesions=len(seg_measurements),
+        seg_measurements=seg_measurements,
+    )
+
+
+def context_with_images(base: ExamContext, image_paths: list[Path]) -> ExamContext:
+    """Return a new ExamContext with the same meta but different image_paths (for multi-agent)."""
+    return ExamContext(
+        patient_id=base.patient_id,
+        accession_number=base.accession_number,
+        image_paths=image_paths,
+        seg_path=base.seg_path,
+        series_files=base.series_files,
+        previous_report_text=base.previous_report_text,
+        n_lesions=base.n_lesions,
+        seg_measurements=base.seg_measurements,
+        radiologist_remark=base.radiologist_remark,
+    )
+
+
+def context_with_remark(base: ExamContext, remark: str | None) -> ExamContext:
+    """Return a new ExamContext with the same data but radiologist_remark set (for refine)."""
+    if not remark and base.radiologist_remark is None:
+        return base
+    return ExamContext(
+        patient_id=base.patient_id,
+        accession_number=base.accession_number,
+        image_paths=base.image_paths,
+        seg_path=base.seg_path,
+        series_files=base.series_files,
+        previous_report_text=base.previous_report_text,
+        n_lesions=base.n_lesions,
+        seg_measurements=base.seg_measurements,
+        radiologist_remark=remark.strip() if remark else None,
     )
 
 
 def make_prompt(system_text: str, user_text: str, ctx: ExamContext) -> LLMPrompt:
     """Build a 2-message LLMPrompt (system + user with images)."""
+    text = user_text
+    if ctx.radiologist_remark:
+        text = text.rstrip() + "\n\nRemarque du radiologue à prendre en compte : " + ctx.radiologist_remark
     prompt = LLMPrompt()
     prompt.messages.append(PromptMessage(role="system", text=system_text))
     prompt.messages.append(
         PromptMessage(
             role="user",
-            text=user_text,
+            text=text,
             image_paths=ctx.image_paths,
             seg_path=ctx.seg_path,
             series_files=ctx.series_files,

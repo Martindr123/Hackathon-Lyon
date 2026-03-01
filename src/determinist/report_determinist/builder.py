@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from src.domain.lesion_determinist import LesionDeterminist
 from src.domain.report_determinist import ReportDeterminist
@@ -49,7 +48,12 @@ def _get_seg_info(
     try:
         return analyze_seg(seg_path)
     except Exception:
-        logger.warning("Failed to analyze SEG for %s / %s", patient_id, accession_number, exc_info=True)
+        logger.warning(
+            "Failed to analyze SEG for %s / %s",
+            patient_id,
+            accession_number,
+            exc_info=True,
+        )
         return []
 
 
@@ -62,9 +66,9 @@ def build_report_determinist(
     """Build the deterministic part of a radiology report.
 
     Data sources:
-    - Lesion dimensions: Excel (current + previous exam)
+    - Lesion dimensions: SEG DICOM (current), SEG or report text (previous)
     - Volume, best slice: SEG DICOM (current + previous exam)
-    - Evolution, change_percent: computed from dimensions
+    - Evolution, change_percent: computed from longest diameters
     - volume_change_percent: computed from volumes
     - RECIST conclusion: computed from sum of longest diameters
     """
@@ -76,10 +80,9 @@ def build_report_determinist(
         logger.warning("No exam found for accession %s", accession_number)
         return ReportDeterminist()
 
-    previous_exam = _find_previous_exam(examen_repo, patient_id, accession_number, data_repo)
-
-    current_sizes = current_exam.lesion_sizes_mm
-    previous_sizes = previous_exam.lesion_sizes_mm if previous_exam else None
+    previous_exam = _find_previous_exam(
+        examen_repo, patient_id, accession_number, data_repo
+    )
 
     current_seg = _get_seg_info(data_repo, patient_id, accession_number)
     previous_seg = (
@@ -88,28 +91,36 @@ def build_report_determinist(
         else []
     )
 
+    # Current diameters from SEG masks (not from the report we are generating)
+    current_sizes = [s.longest_diameter_mm for s in current_seg]
+    # Previous diameters: prefer SEG if available, fall back to report text
+    if previous_seg:
+        previous_sizes = [s.longest_diameter_mm for s in previous_seg]
+    else:
+        previous_sizes = previous_exam.lesion_sizes_mm if previous_exam else None
+
     n_lesions = max(len(current_sizes), len(current_seg))
     lesions: list[LesionDeterminist] = []
 
     for i in range(n_lesions):
-        dims = [current_sizes[i]] if i < len(current_sizes) else []
-        prev_dims = (
-            [previous_sizes[i]] if previous_sizes and i < len(previous_sizes) else None
-        )
-
         seg: SegmentInfo | None = current_seg[i] if i < len(current_seg) else None
         prev_seg: SegmentInfo | None = (
             previous_seg[i] if i < len(previous_seg) else None
         )
 
-        cur_max = max(dims) if dims else None
-        prev_max = max(prev_dims) if prev_dims else None
+        cur_diam = current_sizes[i] if i < len(current_sizes) else None
+        prev_diam = (
+            previous_sizes[i] if previous_sizes and i < len(previous_sizes) else None
+        )
+
+        cur_short = seg.short_axis_mm if seg else None
+        prev_short = prev_seg.short_axis_mm if prev_seg else None
 
         evolution: str | None = None
         change_pct: float | None = None
-        if cur_max is not None and prev_max is not None:
-            evolution = compute_evolution(cur_max, prev_max)
-            change_pct = compute_change_percent(cur_max, prev_max)
+        if cur_diam is not None and prev_diam is not None:
+            evolution = compute_evolution(cur_diam, prev_diam)
+            change_pct = compute_change_percent(cur_diam, prev_diam)
 
         vol_change_pct: float | None = None
         if seg and prev_seg and prev_seg.volume_mm3 > 0:
@@ -117,8 +128,10 @@ def build_report_determinist(
 
         lesions.append(
             LesionDeterminist(
-                dimensions_mm=dims,
-                previous_dimensions_mm=prev_dims,
+                dimensions_mm=[cur_diam] if cur_diam is not None else [],
+                short_axis_mm=cur_short,
+                previous_dimensions_mm=[prev_diam] if prev_diam is not None else None,
+                previous_short_axis_mm=prev_short,
                 evolution=evolution,
                 slice_index=seg.best_slice_index if seg else None,
                 volume_mm3=seg.volume_mm3 if seg else None,
@@ -129,6 +142,6 @@ def build_report_determinist(
             )
         )
 
-    recist = compute_recist_conclusion(current_sizes, previous_sizes)
+    recist = compute_recist_conclusion(current_sizes, previous_sizes or [])
 
     return ReportDeterminist(lesions=lesions, recist_conclusion=recist)
