@@ -204,6 +204,6 @@ The interface will be available at: **http://localhost:8000**
 
 <!-- Replace the paths below with your actual screenshots -->
 
-![Screenshot 1 — Main interface](docs/screenshot-1.png)
+![Screenshot 1 — Main interface](docs/interface.png)
 
-![Screenshot 2 — Generated report](docs/screenshot-2.png)
+![Screenshot 2 — Mock example of the data before being written into the report](docs/mock-example.png)
