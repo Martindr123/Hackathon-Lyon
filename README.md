@@ -204,6 +204,6 @@ L'interface sera disponible à l'adresse : **http://localhost:8000**
 
 <!-- Remplacez les chemins ci-dessous par vos captures d'écran -->
 
-![Capture 1 — Interface principale](docs/screenshot-1.png)
+![Capture 1 — Interface principale](docs/interface.png)
 
-![Capture 2 — Rapport généré](docs/screenshot-2.png)
+![Capture 2 — Mock example of the conclusion page before the report generation](docs/mock-conclusion.png)
