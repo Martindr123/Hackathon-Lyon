@@ -1,53 +1,55 @@
 # RadioAssist — Clinical Report Generator
 
-**RadioAssist** est une application d'aide à la rédaction de comptes rendus de radiologie oncologique, développée lors du Hackathon Unboxed 2026 à Lyon. Elle génère des rapports structurés à partir d'examens DICOM (scanner thoracique, abdominal et pelvien) en combinant une analyse déterministe et des agents LLM.
+> AI-powered assistant for oncology radiology report writing, built with FastAPI and Mistral AI vision agents.
+
+**RadioAssist** is an application designed to assist radiologists in writing structured oncology reports from DICOM exams (thoracic, abdominal and pelvic CT scans). It combines deterministic analysis with LLM-based agents, built during the Hackathon Unboxed 2026 in Lyon.
 
 ---
 
-## Présentation
+## Overview
 
-L'objectif de RadioAssist est d'assister les radiologues dans la rédaction de leurs comptes rendus en automatisant l'analyse des images médicales tout en conservant un contrôle humain à chaque étape (*human-in-the-loop*).
+RadioAssist automates the analysis of medical images while keeping the radiologist in control at every step (*human-in-the-loop*).
 
-L'application prend en entrée des données DICOM (images CT, masques de segmentation, rapports structurés) ainsi que des informations cliniques (fichier Excel), et produit un rapport complet couvrant :
+The application takes DICOM data (CT images, segmentation masks, structured reports) along with clinical information (Excel file) as input, and produces a comprehensive report covering:
 
-- La **localisation et caractérisation des lésions**
-- L'évaluation de l'**infiltration** (vaisseaux, structures adjacentes)
-- Les **findings négatifs** (structures normales)
-- L'évaluation des **organes**
-- Les **découvertes fortuites**
-- Les **conclusions** avec recommandation et classification RECIST
+- **Lesion localization and characterization**
+- **Infiltration assessment** (vessels, adjacent structures)
+- **Negative findings** (normal structures)
+- **Organ assessments**
+- **Incidental findings**
+- **Conclusions** with recommendations and RECIST classification
 
 ---
 
-## Fonctionnalités
+## Features
 
-### Génération de rapports
+### Report Generation
 
-- **Quick Generate** : génération directe en une passe (~30 s), sans validation intermédiaire.
-- **Generate Report** : pipeline interactif en 6 étapes avec validation et possibilité de relance à chaque étape.
+- **Quick Generate**: one-shot generation (~30 s) without intermediate validation.
+- **Generate Report**: interactive 6-step pipeline with validation and the ability to re-run each step.
 
-### Pipeline interactif
+### Interactive Pipeline
 
-Le rapport est construit progressivement en 6 étapes. À chaque étape, le radiologue peut valider, modifier manuellement ou relancer l'agent avec une remarque :
+The report is built progressively in 6 steps. At each step, the radiologist can validate, manually edit, or re-run the agent with a remark:
 
-1. **Lésions** — localisation anatomique, caractérisation, niveau de confiance
-2. **Infiltration** — niveau (aucun, contact simple, suspicion, certain) et indicateurs
-3. **Findings négatifs** — structures normales identifiées
-4. **Évaluation des organes** — état normal ou anormal par organe
-5. **Découvertes fortuites** — anomalies non attendues
-6. **Conclusions** — synthèse, recommandation, classification RECIST
+1. **Lesions** — anatomical localization, characterization, confidence level
+2. **Infiltration** — level (none, simple contact, suspicion, certain) and indicators
+3. **Negative findings** — identified normal structures
+4. **Organ assessments** — normal vs abnormal status per organ
+5. **Incidental findings** — unexpected anomalies
+6. **Conclusions** — summary, recommendation, RECIST classification
 
-### Visualisation
+### Visualization
 
-- Carrousel d'images avec overlay des masques de segmentation
-- Navigation dans le volume 3D (slider entre les coupes)
-- Comparaison côte à côte avec l'examen précédent
+- Image carousel with segmentation mask overlay
+- 3D volume navigation (slice slider)
+- Side-by-side comparison with previous exam
 
 ### Export
 
-- Copie texte
-- Export JSON
-- Export PDF (via jsPDF)
+- Text copy
+- JSON export
+- PDF export (via jsPDF)
 
 ---
 
@@ -55,29 +57,29 @@ Le rapport est construit progressivement en 6 étapes. À chaque étape, le radi
 
 ```
 Hackathon-Lyon/
-├── main.py                         # Point d'entrée FastAPI
+├── main.py                         # FastAPI entry point
 ├── requirements.txt
-├── .env                            # Clé API Mistral
+├── .env                            # Mistral API key
 │
-├── app/                            # Frontend (HTML / CSS / JS vanilla)
+├── app/                            # Frontend (vanilla HTML / CSS / JS)
 │   ├── index.html
 │   ├── style.css
 │   └── app.js
 │
 ├── src/
-│   ├── api/                        # Contrôleurs et services HTTP
-│   │   ├── report_controller.py    #   Routes /api/v1/reports
-│   │   ├── image_service.py        #   Préparation des images
-│   │   └── session_manager.py      #   Gestion des sessions en mémoire
+│   ├── api/                        # HTTP controllers & services
+│   │   ├── report_controller.py    #   /api/v1/reports routes
+│   │   ├── image_service.py        #   Image preparation
+│   │   └── session_manager.py      #   In-memory session management
 │   │
-│   ├── domain/                     # Modèles Pydantic (entités métier)
+│   ├── domain/                     # Pydantic models (business entities)
 │   │   ├── clinical_report.py
 │   │   ├── report_findings.py
 │   │   ├── report_determinist.py
 │   │   ├── report_agent.py
 │   │   └── ...
 │   │
-│   ├── agents/                     # Agents LLM (Mistral vision + texte)
+│   ├── agents/                     # LLM agents (Mistral vision + text)
 │   │   ├── lesions_agent.py
 │   │   ├── infiltration_agent.py
 │   │   ├── negative_findings_agent.py
@@ -87,123 +89,121 @@ Hackathon-Lyon/
 │   │   ├── remark_guard_agent.py
 │   │   └── ...
 │   │
-│   ├── determinist/                # Analyse déterministe (sans LLM)
+│   ├── determinist/                # Deterministic analysis (no LLM)
 │   │   ├── report_determinist/
-│   │   │   ├── builder.py          #   Construction du rapport
-│   │   │   ├── recist.py           #   Calculs RECIST 1.1
-│   │   │   └── seg_analyzer.py     #   Analyse des segmentations
-│   │   └── advanced_metrics/       #   Métriques avancées (TGR, hétérogénéité)
+│   │   │   ├── builder.py          #   Report construction
+│   │   │   ├── recist.py           #   RECIST 1.1 calculations
+│   │   │   └── seg_analyzer.py     #   Segmentation analysis
+│   │   └── advanced_metrics/       #   Advanced metrics (TGR, heterogeneity)
 │   │
-│   ├── services/                   # Services externes
-│   │   ├── llm_service.py          #   Client Mistral AI
-│   │   └── llm_prompt_service.py   #   Construction des prompts
+│   ├── services/                   # External services
+│   │   ├── llm_service.py          #   Mistral AI client
+│   │   └── llm_prompt_service.py   #   Prompt building
 │   │
-│   ├── repositories/               # Accès aux données
-│   │   ├── data_repo.py            #   Lecture DICOM
-│   │   └── liste_examen_repo.py    #   Lecture Excel
+│   ├── repositories/               # Data access
+│   │   ├── data_repo.py            #   DICOM reading
+│   │   └── liste_examen_repo.py    #   Excel reading
 │   │
-│   └── uses_cases/                 # Cas d'usage
+│   └── uses_cases/                 # Use cases
 │       ├── create_last_report.py
 │       └── interactive_pipeline.py
 ```
 
-### Flux de données
+### Data Flow
 
 ```
-Données DICOM (CT, SEG, SR)  ──┐
-                                ├──▶  ExamContext  ──▶  Analyse déterministe (RECIST, volumes)
-Données cliniques (Excel)    ──┘                   ──▶  Agents LLM (Mistral vision)
-                                                               │
-                                                               ▼
-                                                       ClinicalReport
+DICOM data (CT, SEG, SR)  ──┐
+                             ├──▶  ExamContext  ──▶  Deterministic analysis (RECIST, volumes)
+Clinical data (Excel)     ──┘                   ──▶  LLM agents (Mistral vision)
+                                                            │
+                                                            ▼
+                                                    ClinicalReport
 ```
 
 ---
 
-## Stack technique
+## Tech Stack
 
-| Composant | Technologie |
-|-----------|-------------|
+| Component | Technology |
+|-----------|------------|
 | Backend | **FastAPI** + uvicorn |
 | LLM | **Mistral AI** (`mistral-large-latest`, vision) |
-| Imagerie médicale | SimpleITK, MONAI, OpenCV, scikit-image |
+| Medical imaging | SimpleITK, MONAI, OpenCV, scikit-image |
 | DICOM | pydicom, dicom2nifti, nibabel |
-| Données cliniques | pandas, openpyxl |
-| Frontend | HTML / CSS / JS vanilla, jsPDF |
+| Clinical data | pandas, openpyxl |
+| Frontend | Vanilla HTML / CSS / JS, jsPDF |
 | Configuration | python-dotenv |
 
 ---
 
-## Démarrage du projet
+## Getting Started
 
-### 1. Créer l'environnement virtuel
+### 1. Create a virtual environment
 
 ```bash
 python3 -m venv env
 ```
 
-### 2. Activer l'environnement virtuel
+### 2. Activate the virtual environment
 
-**Sur macOS / Linux :**
+**macOS / Linux:**
 ```bash
 source env/bin/activate
 ```
 
-**Sur Windows (PowerShell) :**
+**Windows (PowerShell):**
 ```powershell
 .\env\Scripts\Activate.ps1
 ```
 
-**Sur Windows (cmd) :**
+**Windows (cmd):**
 ```cmd
 .\env\Scripts\activate.bat
 ```
 
-Une fois activé, le préfixe `(env)` apparaît dans votre terminal.
+Once activated, the `(env)` prefix appears in your terminal.
 
-### 3. Configurer la clé API
+### 3. Configure the API key
 
-Copier `.env_template` vers `.env` et renseigner votre clé API Mistral :
+Copy `.env_template` to `.env` and fill in your Mistral API key:
 
 ```bash
 cp .env_template .env
 ```
 
-### 4. Installer les dépendances
+### 4. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> ⚠️ **Attention** : pas d'espace entre `-r` et le nom du fichier. Utilisez `pip install -r requirements.txt` et non `pip install - r requirements.txt`.
+### 5. Run the application
 
-### 5. Lancer l'application
-
-Depuis la racine du projet (avec l'environnement virtuel activé) :
+From the project root (with the virtual environment activated):
 
 ```bash
 uvicorn main:app --reload
 ```
 
-L'interface sera disponible à l'adresse : **http://localhost:8000**
+The interface will be available at: **http://localhost:8000**
 
-- `--reload` recharge automatiquement le serveur quand vous modifiez le code (optionnel en développement).
-
----
-
-## Commandes utiles
-
-| Action | Commande |
-|--------|----------|
-| Désactiver le venv | `deactivate` |
-| Mettre à jour pip | `pip install --upgrade pip` |
+- `--reload` automatically restarts the server when you edit code (optional, for development).
 
 ---
 
-## Illustrations
+## Useful Commands
 
-<!-- Remplacez les chemins ci-dessous par vos captures d'écran -->
+| Action | Command |
+|--------|---------|
+| Deactivate venv | `deactivate` |
+| Upgrade pip | `pip install --upgrade pip` |
 
-![Capture 1 — Interface principale](docs/interface.png)
+---
 
-![Capture 2 — Mock example of the conclusion page before the report generation](docs/mock-conclusion.png)
+## Screenshots
+
+<!-- Replace the paths below with your actual screenshots -->
+
+![Screenshot 1 — Main interface](docs/screenshot-1.png)
+
+![Screenshot 2 — Generated report](docs/screenshot-2.png)
